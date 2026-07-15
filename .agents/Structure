@@ -1,0 +1,8 @@
+pbscriptpy/
+├── main.py          # NiceGUI UI (replaced tkinter)
+├── core.py          # Hook + SendInput + macro engine
+├── config.py        # Default settings
+├── .agents/         # Metadata
+├── Project.md       # PRD
+├── .gitattributes
+└── .git/

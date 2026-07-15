@@ -1,0 +1,12 @@
+No persistent data/schema. In-memory state only:
+
+MacroConfig:
+  mode: "sniper" | "ar_smg" | "shotgun"
+  trigger: "lclick" | "xbutton1" | "xbutton2"
+  delays: list[int]  # per-step delay in ms
+  recoil: bool       # AR/SMG only
+
+AppState:
+  running: bool
+  listening: bool
+  macro_active: bool

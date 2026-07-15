@@ -1,0 +1,20 @@
+# TODO
+- [ ] Build .exe: need to figure out NiceGUI packaging (different from tkinter)
+- [ ] Test on Windows 10/11 with admin rights
+- [ ] Maybe add native window mode (pywebview) for desktop feel
+
+## DONE
+- [x] Replaced tkinter with NiceGUI for modern dark-themed UI
+- [x] Thread-safe log/status via queue + ui.timer polling
+- [x] HOOKPROC kept alive (was GC crash)
+- [x] PostThreadMessage ke thread ID yg bener
+- [x] try/except semua path macro + hook
+- [x] _finish_macro() reset state
+- [x] Slider full width ganti spinbox
+- [x] Recoil slider 1-20px
+- [x] Switch method QQ/31
+- [x] Sniper: scope->fire->close->switch (4 slider delay)
+- [x] Shotgun: fire->switch (2 slider delay)
+- [x] Keyboard hook (WH_KEYBOARD_LL) + 96 VK name mappings
+- [x] Log semua mouse event (L/R/M/X clicks) ke log box
+- [x] Log semua keyboard key down ke log box
