@@ -368,6 +368,9 @@ def set_config(key, value):
 def get_config(key):
     return _cfg.get(key)
 
+def is_listening():
+    return _listening
+
 def set_log_callback(cb):
     global _log_callback
     _log_callback = cb

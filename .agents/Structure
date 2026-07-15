@@ -1,7 +1,8 @@
 pbscriptpy/
-├── main.py          # NiceGUI UI (replaced tkinter)
-├── core.py          # Hook + SendInput + macro engine
+├── main.py          # NiceGUI UI + profile management (save/load/edit/delete/export)
+├── core.py          # Hook + SendInput + macro engine + is_listening()
 ├── config.py        # Default settings
+├── profiles.json    # Auto-saved profile data
 ├── .agents/         # Metadata
 ├── Project.md       # PRD
 ├── .gitattributes

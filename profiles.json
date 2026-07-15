@@ -1,0 +1,45 @@
+{
+  "profiles": [
+    {
+      "name": "Default",
+      "mode": "sniper",
+      "trigger": "xbutton1",
+      "sniper_delays": [
+        50,
+        50,
+        32,
+        50
+      ],
+      "shotgun_delays": [
+        50,
+        50
+      ],
+      "ar_smg_delay": 80,
+      "switch_method": "qq",
+      "key_hold_delay": 40,
+      "recoil": true,
+      "recoil_amount": 4
+    },
+    {
+      "name": "AUG HBAR",
+      "mode": "ar_smg",
+      "trigger": "xbutton1",
+      "sniper_delays": [
+        50,
+        50,
+        50,
+        50
+      ],
+      "shotgun_delays": [
+        50,
+        50
+      ],
+      "ar_smg_delay": 20,
+      "switch_method": "qq",
+      "key_hold_delay": 40,
+      "recoil": true,
+      "recoil_amount": 4
+    }
+  ],
+  "active": 1
+}

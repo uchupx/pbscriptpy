@@ -2,4 +2,6 @@
 - nicegui + pywebview (native desktop UI, replaces tkinter)
 - ctypes (Windows API: user32.dll)
 - threading (async listener)
+- json (profile storage)
+- os (file path)
 - time (delays)

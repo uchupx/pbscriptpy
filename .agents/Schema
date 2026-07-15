@@ -10,3 +10,15 @@ AppState:
   running: bool
   listening: bool
   macro_active: bool
+
+Profile (JSON file):
+  name: str
+  mode: str
+  trigger: str
+  sniper_delays: list[int]
+  shotgun_delays: list[int]
+  ar_smg_delay: int
+  switch_method: "qq" | "31"
+  key_hold_delay: int
+  recoil: bool
+  recoil_amount: int
