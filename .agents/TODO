@@ -4,6 +4,9 @@
 - [ ] Test F5 cycle on native window keyboard focus
 
 ## DONE
+- [x] GitHub Actions workflow: PyInstaller Windows EXE build
+- [x] requirements.txt with nicegui + pywebview
+- [x] .gitignore keeps docs/superpowers/ tracked
 - [x] Profile system: save/load/edit/delete/export profiles as JSON
 - [x] Auto-save with 3s debounce on any UI change
 - [x] Auto-restart listener after save if was running
