@@ -43,7 +43,6 @@ pywebview
 pyinstaller --onefile ^
   --name "PB-Script-Macro" ^
   --collect-all nicegui ^
-  --add-data "nicegui;nicegui" ^
   --hide-console hide-early ^
   main.py
 ```
@@ -54,8 +53,7 @@ pyinstaller --onefile ^
 |------|--------|
 | `--onefile` | Single `.exe` output for easy distribution |
 | `--name "PB-Script-Macro"` | Descriptive executable name |
-| `--collect-all nicegui` | Bundle all NiceGUI submodules (required for frozen app) |
-| `--add-data "nicegui;nicegui"` | Include NiceGUI static assets (JS/CSS) |
+| `--collect-all nicegui` | Bundle all NiceGUI submodules + data (required for frozen app) |
 | `--hide-console hide-early` | Hide console window on startup (alternative to `--windowed` which breaks NiceGUI native mode) |
 | `main.py` | Entry point |
 
@@ -90,7 +88,7 @@ jobs:
 
       - name: Build with PyInstaller
         run: |
-          pyinstaller --onefile --name "PB-Script-Macro" --collect-all nicegui --add-data "nicegui;nicegui" --hide-console hide-early main.py
+          pyinstaller --onefile --name "PB-Script-Macro" --collect-all nicegui --hide-console hide-early main.py
 
       - name: Upload artifact
         uses: actions/upload-artifact@v4

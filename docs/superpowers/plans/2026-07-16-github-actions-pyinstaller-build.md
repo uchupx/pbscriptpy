@@ -13,7 +13,7 @@
 - Use `windows-latest` runner
 - Use Python 3.12
 - Single `.exe` via `--onefile`
-- Must include `--collect-all nicegui` and `--add-data "nicegui;nicegui"`
+- Must include `--collect-all nicegui` (not `--add-data` — causes path lookup error)
 - Use `--hide-console hide-early` not `--windowed`
 - Output artifact named `PB-Script-Macro-Windows`
 
@@ -109,7 +109,7 @@ jobs:
 
       - name: Build with PyInstaller
         run: |
-          pyinstaller --onefile --name "PB-Script-Macro" --collect-all nicegui --add-data "nicegui;nicegui" --hide-console hide-early main.py
+          pyinstaller --onefile --name "PB-Script-Macro" --collect-all nicegui --hide-console hide-early main.py
 
       - name: Upload artifact
         uses: actions/upload-artifact@v4

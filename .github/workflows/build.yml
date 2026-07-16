@@ -24,7 +24,7 @@ jobs:
 
       - name: Build with PyInstaller
         run: |
-          pyinstaller --onefile --name "PB-Script-Macro" --collect-all nicegui --add-data "nicegui;nicegui" --hide-console hide-early main.py
+          pyinstaller --onefile --name "PB-Script-Macro" --collect-all nicegui --hide-console hide-early main.py
 
       - name: Upload artifact
         uses: actions/upload-artifact@v4
