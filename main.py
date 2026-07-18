@@ -75,6 +75,8 @@ def _hide_toast():
         _toast_window.withdraw()
 
 _selected_delay_slot = 0
+_last_action = ""
+_last_action_time = 0
 
 # --- Core callbacks ---
 def _log(msg):
@@ -496,6 +498,12 @@ def poll_queues():
         status_var.set(status_queue.get_nowait())
     while not action_queue.empty():
         action, data = action_queue.get_nowait()
+        global _last_action, _last_action_time
+        now = int(time.time() * 1000)
+        if action == _last_action and (now - _last_action_time) < 250:
+            continue
+        _last_action = action
+        _last_action_time = now
         handler = ACTION_MAP.get(action)
         if handler:
             toast_text = handler(data)
