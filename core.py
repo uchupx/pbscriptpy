@@ -35,6 +35,18 @@ MOUSEEVENTF_MOVE = 0x0001
 
 KEYEVENTF_KEYUP = 0x0002
 
+WH_KEYBOARD_LL = 13
+WM_KEYDOWN = 0x0100
+WM_KEYUP = 0x0101
+WM_SYSKEYDOWN = 0x0104
+VK_CONTROL = 0x11
+VK_F1 = 0x70
+VK_F5 = 0x74
+VK_F6 = 0x75
+VK_F7 = 0x76
+VK_F8 = 0x77
+VK_F12 = 0x7B
+
 # --- Structures ---
 class MSLLHOOKSTRUCT(ctypes.Structure):
     _fields_ = [
@@ -86,6 +98,15 @@ class INPUT(ctypes.Structure):
         ("union", _INPUT_UNION),
     ]
 
+class KBDLLHOOKSTRUCT(ctypes.Structure):
+    _fields_ = [
+        ("vkCode", ctypes.c_ulong),
+        ("scanCode", ctypes.c_ulong),
+        ("flags", ctypes.c_ulong),
+        ("time", ctypes.c_ulong),
+        ("dwExtraInfo", ctypes.c_void_p),
+    ]
+
 # --- State ---
 _listening = False
 _running = False
@@ -101,6 +122,21 @@ _status_callback = None
 _macro_thread = None
 _pb_hwnd = None  # set by main.py so hook knows when PB window is focused
 _trigger_blocked = False  # F12 toggles this; when True, trigger passes through
+
+# --- Keyboard hook state ---
+_kb_hook = None
+_kb_hook_proc = None
+_kb_hook_thread = None
+_kb_hook_thread_id = None
+_kb_callback = None
+
+def set_action_callback(cb):
+    global _kb_callback
+    _kb_callback = cb
+
+def _queue_action(name, data=None):
+    if _kb_callback:
+        _kb_callback(name, data or {})
 
 # --- Input Simulation ---
 
@@ -216,6 +252,100 @@ def _finish_macro():
     _trigger_held = False
     if _status_callback:
         _status_callback("Idle")
+
+# --- Keyboard Hook ---
+
+KBHOOKPROC = ctypes.WINFUNCTYPE(ctypes.c_long, ctypes.c_int, ctypes.c_long, ctypes.POINTER(ctypes.c_long))
+
+def _make_keyboard_callback():
+    def callback(nCode, wParam, lParam):
+        if nCode == 0 and wParam in (WM_KEYDOWN, WM_SYSKEYDOWN):
+            kb = ctypes.cast(lParam, ctypes.POINTER(KBDLLHOOKSTRUCT)).contents
+            vk = kb.vkCode
+            ctrl_down = (ctypes.windll.user32.GetAsyncKeyState(VK_CONTROL) & 0x8000) != 0
+
+            action = None
+            data = {}
+
+            if vk == VK_F1:
+                action = "show_status"
+            elif vk == VK_F5:
+                action = "cycle_profile"
+            elif vk == VK_F6:
+                action = "toggle_trigger_block"
+            elif vk == VK_F7:
+                action = "cycle_mode"
+            elif vk == VK_F8:
+                action = "toggle_recoil"
+            elif vk == VK_F12:
+                action = "toggle_listener"
+            elif vk == 0x31 and ctrl_down:
+                action = "select_delay_slot"
+                data["slot"] = 0
+            elif vk == 0x32 and ctrl_down:
+                action = "select_delay_slot"
+                data["slot"] = 1
+            elif vk == 0x33 and ctrl_down:
+                action = "select_delay_slot"
+                data["slot"] = 2
+            elif vk == 0x34 and ctrl_down:
+                action = "select_delay_slot"
+                data["slot"] = 3
+            elif vk == 0xBB and not ctrl_down:
+                action = "delay_adjust"
+                data["delta"] = 1
+            elif vk == 0xBD and not ctrl_down:
+                action = "delay_adjust"
+                data["delta"] = -1
+            elif vk == 0xBB and ctrl_down:
+                action = "recoil_adjust"
+                data["delta"] = 1
+            elif vk == 0xBD and ctrl_down:
+                action = "recoil_adjust"
+                data["delta"] = -1
+
+            if action:
+                _queue_action(action, data)
+
+        return ctypes.windll.user32.CallNextHookEx(None, nCode, wParam, lParam)
+    return callback
+
+def start_keyboard_hook():
+    global _kb_hook, _kb_hook_proc, _kb_hook_thread, _kb_hook_thread_id
+    if _kb_hook:
+        return
+    cb = _make_keyboard_callback()
+    _kb_hook_proc = KBHOOKPROC(cb)
+    _kb_hook = ctypes.windll.user32.SetWindowsHookExA(WH_KEYBOARD_LL, _kb_hook_proc, None, 0)
+    if not _kb_hook:
+        _log("Failed to set keyboard hook!")
+        _kb_hook_proc = None
+        return
+
+    def _kb_msg_loop():
+        global _kb_hook_thread_id
+        _kb_hook_thread_id = ctypes.windll.kernel32.GetCurrentThreadId()
+        msg = MSG()
+        while _kb_hook:
+            ret = ctypes.windll.user32.GetMessageA(ctypes.byref(msg), None, 0, 0)
+            if ret == 0:
+                break
+            ctypes.windll.user32.TranslateMessage(ctypes.byref(msg))
+            ctypes.windll.user32.DispatchMessageA(ctypes.byref(msg))
+
+    _kb_hook_thread = threading.Thread(target=_kb_msg_loop, daemon=True)
+    _kb_hook_thread.start()
+    _log("Keyboard hook started")
+
+def stop_keyboard_hook():
+    global _kb_hook, _kb_hook_proc
+    if _kb_hook:
+        ctypes.windll.user32.UnhookWindowsHookEx(_kb_hook)
+        _kb_hook = None
+    _kb_hook_proc = None
+    if _kb_hook_thread_id:
+        ctypes.windll.user32.PostThreadMessageA(_kb_hook_thread_id, 0x0012, 0, 0)
+    _log("Keyboard hook stopped")
 
 # --- Hook Callback ---
 HOOKPROC = ctypes.WINFUNCTYPE(ctypes.c_long, ctypes.c_int, ctypes.c_long, ctypes.POINTER(ctypes.c_long))
