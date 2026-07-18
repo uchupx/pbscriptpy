@@ -129,7 +129,7 @@ _kb_hook_proc = None
 _kb_hook_thread = None
 _kb_hook_thread_id = None
 _kb_callback = None
-_kb_held_keys = set()
+_kb_blocked_until = 0
 
 def set_action_callback(cb):
     global _kb_callback
@@ -260,23 +260,18 @@ KBHOOKPROC = ctypes.WINFUNCTYPE(ctypes.c_long, ctypes.c_int, ctypes.c_long, ctyp
 
 def _make_keyboard_callback():
     def callback(nCode, wParam, lParam):
-        if nCode == 0:
+        if nCode != 0:
+            return ctypes.windll.user32.CallNextHookEx(None, nCode, wParam, lParam)
+
+        # Block: skip all shortcuts for 250ms after any shortcut fired
+        global _kb_blocked_until
+        if wParam in (WM_KEYDOWN, WM_SYSKEYDOWN):
+            now_ms = ctypes.windll.kernel32.GetTickCount()
+            if _kb_blocked_until and now_ms < _kb_blocked_until:
+                return ctypes.windll.user32.CallNextHookEx(None, nCode, wParam, lParam)
+
             kb = ctypes.cast(lParam, ctypes.POINTER(KBDLLHOOKSTRUCT)).contents
             vk = kb.vkCode
-
-            # Track key state: skip repeat WM_KEYDOWN if key still held
-            global _kb_held_keys
-            if wParam in (WM_KEYDOWN, WM_SYSKEYDOWN):
-                if vk in _kb_held_keys:
-                    return ctypes.windll.user32.CallNextHookEx(None, nCode, wParam, lParam)
-                _kb_held_keys.add(vk)
-            elif wParam in (WM_KEYUP,):
-                _kb_held_keys.discard(vk)
-                return ctypes.windll.user32.CallNextHookEx(None, nCode, wParam, lParam)
-
-            if wParam not in (WM_KEYDOWN, WM_SYSKEYDOWN):
-                return ctypes.windll.user32.CallNextHookEx(None, nCode, wParam, lParam)
-
             ctrl_down = (ctypes.windll.user32.GetAsyncKeyState(VK_CONTROL) & 0x8000) != 0
 
             action = None
@@ -320,6 +315,7 @@ def _make_keyboard_callback():
                 data["delta"] = -1
 
             if action:
+                _kb_blocked_until = now_ms + 250
                 _queue_action(action, data)
 
         return ctypes.windll.user32.CallNextHookEx(None, nCode, wParam, lParam)
