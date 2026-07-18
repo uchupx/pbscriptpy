@@ -640,9 +640,7 @@ _refresh_profile_dropdown()
 if profiles:
     apply_profile(active_idx)
 
-# Keyboard bindings
-root.bind("<F5>", lambda e: on_f5())
-root.bind("<F12>", lambda e: on_f12())
+# Keyboard bindings (only non-shortcut keys; F5/F12/F1/etc handled by polling thread)
 
 # Poll queues
 root.after(100, poll_queues)
