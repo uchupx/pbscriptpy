@@ -129,6 +129,8 @@ _kb_hook_proc = None
 _kb_hook_thread = None
 _kb_hook_thread_id = None
 _kb_callback = None
+_kb_last_vk = 0
+_kb_last_time = 0
 
 def set_action_callback(cb):
     global _kb_callback
@@ -262,6 +264,15 @@ def _make_keyboard_callback():
         if nCode == 0 and wParam in (WM_KEYDOWN, WM_SYSKEYDOWN):
             kb = ctypes.cast(lParam, ctypes.POINTER(KBDLLHOOKSTRUCT)).contents
             vk = kb.vkCode
+
+            # Debounce: skip repeats within 200ms (key repeat generates multiple WM_KEYDOWN)
+            global _kb_last_vk, _kb_last_time
+            now = kb.time
+            if vk == _kb_last_vk and (now - _kb_last_time) < 200:
+                return ctypes.windll.user32.CallNextHookEx(None, nCode, wParam, lParam)
+            _kb_last_vk = vk
+            _kb_last_time = now
+
             ctrl_down = (ctypes.windll.user32.GetAsyncKeyState(VK_CONTROL) & 0x8000) != 0
 
             action = None
