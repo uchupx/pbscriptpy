@@ -86,7 +86,7 @@ def _schedule_save():
     global _save_timer
     if _save_timer:
         root.after_cancel(_save_timer)
-    _save_timer = root.after(3000, _do_save)
+    _save_timer = root.after(500, _do_save)
 
 def _do_save():
     global _save_timer
