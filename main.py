@@ -451,9 +451,10 @@ def _handle_delay_adjust(data):
     mode = p["mode"]
     labels, vals = _get_delay_labels_and_vals(p)
     idx = min(_selected_delay_slot, len(vals) - 1)
-    new_val = max(0, min(200, vals[idx] + data["delta"]))
+    old_val = vals[idx]
+    new_val = max(0, min(200, old_val + data["delta"]))
     vals[idx] = new_val
-    _log(f"Delay adjust: slot={idx} ({labels[idx]}) {vals[idx]}->{new_val}ms")
+    _log(f"Delay adjust: slot={idx} ({labels[idx]}) {old_val}->{new_val}ms")
     if mode == "sniper":
         p["sniper_delays"] = vals[:4]
     elif mode == "shotgun":

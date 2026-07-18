@@ -122,6 +122,7 @@ _action_callback = None
 _shortcut_running = False
 _shortcut_thread = None
 _shortcut_prev = {}  # vk -> bool (was pressed last poll)
+_slot_selected_at = 0  # timestamp of last delay slot selection
 
 def set_action_callback(cb):
     global _action_callback
@@ -276,17 +277,29 @@ def _shortcut_poll():
                 ctrl_down = (ctypes.windll.user32.GetAsyncKeyState(VK_CONTROL) & 0x8000) != 0
                 data = {}
 
-                # Ctrl+1/2/3/4 or Ctrl+=/-
+                # Ctrl+1/2/3/4 select delay slot
                 if ctrl_down and vk in (VK_1, VK_2, VK_3, VK_4):
                     data["slot"] = slot
+                    _slot_selected_at = ctypes.windll.kernel32.GetTickCount()
                     _log(f"Poll: Ctrl+{vk-0x30} → select_delay_slot slot={slot}")
                     _queue_action(action_name, data)
+                # Ctrl+= / Ctrl+-: recoil_adjust, UNLESS slot was just selected (<500ms)
                 elif ctrl_down and vk == VK_OEM_PLUS:
-                    _log("Poll: Ctrl+= → recoil_adjust +1")
-                    _queue_action("recoil_adjust", {"delta": 1})
+                    now = ctypes.windll.kernel32.GetTickCount()
+                    if _slot_selected_at and now - _slot_selected_at < 500:
+                        _log("Poll: Ctrl+= → delay_adjust +1 (slot mode)")
+                        _queue_action("delay_adjust", {"delta": 1})
+                    else:
+                        _log("Poll: Ctrl+= → recoil_adjust +1")
+                        _queue_action("recoil_adjust", {"delta": 1})
                 elif ctrl_down and vk == VK_OEM_MINUS:
-                    _log("Poll: Ctrl+- → recoil_adjust -1")
-                    _queue_action("recoil_adjust", {"delta": -1})
+                    now = ctypes.windll.kernel32.GetTickCount()
+                    if _slot_selected_at and now - _slot_selected_at < 500:
+                        _log("Poll: Ctrl+- → delay_adjust -1 (slot mode)")
+                        _queue_action("delay_adjust", {"delta": -1})
+                    else:
+                        _log("Poll: Ctrl+- → recoil_adjust -1")
+                        _queue_action("recoil_adjust", {"delta": -1})
                 # Non-Ctrl shortcuts
                 elif not ctrl_down:
                     if action_name == "select_delay_slot":
