@@ -35,10 +35,7 @@ MOUSEEVENTF_MOVE = 0x0001
 
 KEYEVENTF_KEYUP = 0x0002
 
-WH_KEYBOARD_LL = 13
-WM_KEYDOWN = 0x0100
-WM_KEYUP = 0x0101
-WM_SYSKEYDOWN = 0x0104
+# --- Shortcut VK codes (for GetAsyncKeyState polling) ---
 VK_CONTROL = 0x11
 VK_F1 = 0x70
 VK_F5 = 0x74
@@ -46,6 +43,12 @@ VK_F6 = 0x75
 VK_F7 = 0x76
 VK_F8 = 0x77
 VK_F12 = 0x7B
+VK_1 = 0x31
+VK_2 = 0x32
+VK_3 = 0x33
+VK_4 = 0x34
+VK_OEM_PLUS = 0xBB    # =
+VK_OEM_MINUS = 0xBD   # -
 
 # --- Structures ---
 class MSLLHOOKSTRUCT(ctypes.Structure):
@@ -98,15 +101,6 @@ class INPUT(ctypes.Structure):
         ("union", _INPUT_UNION),
     ]
 
-class KBDLLHOOKSTRUCT(ctypes.Structure):
-    _fields_ = [
-        ("vkCode", ctypes.c_ulong),
-        ("scanCode", ctypes.c_ulong),
-        ("flags", ctypes.c_ulong),
-        ("time", ctypes.c_ulong),
-        ("dwExtraInfo", ctypes.c_void_p),
-    ]
-
 # --- State ---
 _listening = False
 _running = False
@@ -123,21 +117,19 @@ _macro_thread = None
 _pb_hwnd = None  # set by main.py so hook knows when PB window is focused
 _trigger_blocked = False  # F12 toggles this; when True, trigger passes through
 
-# --- Keyboard hook state ---
-_kb_hook = None
-_kb_hook_proc = None
-_kb_hook_thread = None
-_kb_hook_thread_id = None
-_kb_callback = None
-_kb_blocked_until = 0
+# --- Shortcut polling state (replaces WH_KEYBOARD_LL) ---
+_action_callback = None
+_shortcut_running = False
+_shortcut_thread = None
+_shortcut_prev = {}  # vk -> bool (was pressed last poll)
 
 def set_action_callback(cb):
-    global _kb_callback
-    _kb_callback = cb
+    global _action_callback
+    _action_callback = cb
 
 def _queue_action(name, data=None):
-    if _kb_callback:
-        _kb_callback(name, data or {})
+    if _action_callback:
+        _action_callback(name, data or {})
 
 # --- Input Simulation ---
 
@@ -254,113 +246,75 @@ def _finish_macro():
     if _status_callback:
         _status_callback("Idle")
 
-# --- Keyboard Hook ---
+# --- Shortcut Polling (GetAsyncKeyState) ---
 
-KBHOOKPROC = ctypes.WINFUNCTYPE(ctypes.c_long, ctypes.c_int, ctypes.c_long, ctypes.POINTER(ctypes.c_long))
+SHORTCUT_POLL_MS = 50
 
-def _make_keyboard_callback():
-    def callback(nCode, wParam, lParam):
-        if nCode != 0:
-            return ctypes.windll.user32.CallNextHookEx(None, nCode, wParam, lParam)
+def _shortcut_poll():
+    """Poll each shortcut key for rising edge (up→down transition)."""
+    global _shortcut_prev
+    try:
+        for vk, action_name, slot in [
+            (VK_F1, "show_status", None),
+            (VK_F5, "cycle_profile", None),
+            (VK_F6, "toggle_trigger_block", None),
+            (VK_F7, "cycle_mode", None),
+            (VK_F8, "toggle_recoil", None),
+            (VK_F12, "toggle_listener", None),
+            (VK_1, "select_delay_slot", 0),
+            (VK_2, "select_delay_slot", 1),
+            (VK_3, "select_delay_slot", 2),
+            (VK_4, "select_delay_slot", 3),
+            (VK_OEM_PLUS, "delay_adjust", None),
+            (VK_OEM_MINUS, "delay_adjust", None),
+        ]:
+            now_down = (ctypes.windll.user32.GetAsyncKeyState(vk) & 0x8000) != 0
+            was_down = _shortcut_prev.get(vk, False)
+            _shortcut_prev[vk] = now_down
 
-        # Block: skip all shortcuts for 500ms after any shortcut fired
-        global _kb_blocked_until
-        if wParam in (WM_KEYDOWN, WM_SYSKEYDOWN):
-            now_ms = ctypes.windll.kernel32.GetTickCount()
-            if _kb_blocked_until and now_ms < _kb_blocked_until:
-                kb = ctypes.cast(lParam, ctypes.POINTER(KBDLLHOOKSTRUCT)).contents
-                _log(f"KB hook BLOCKED vk={kb.vkCode} now={now_ms} until={_kb_blocked_until}")
-                return ctypes.windll.user32.CallNextHookEx(None, nCode, wParam, lParam)
+            if now_down and not was_down:
+                ctrl_down = (ctypes.windll.user32.GetAsyncKeyState(VK_CONTROL) & 0x8000) != 0
+                data = {}
 
-            kb = ctypes.cast(lParam, ctypes.POINTER(KBDLLHOOKSTRUCT)).contents
-            vk = kb.vkCode
-            ctrl_down = (ctypes.windll.user32.GetAsyncKeyState(VK_CONTROL) & 0x8000) != 0
+                # Ctrl+1/2/3/4 or Ctrl+=/-
+                if ctrl_down and vk in (VK_1, VK_2, VK_3, VK_4):
+                    data["slot"] = slot
+                    _queue_action(action_name, data)
+                elif ctrl_down and vk == VK_OEM_PLUS:
+                    _queue_action("recoil_adjust", {"delta": 1})
+                elif ctrl_down and vk == VK_OEM_MINUS:
+                    _queue_action("recoil_adjust", {"delta": -1})
+                # Non-Ctrl shortcuts
+                elif not ctrl_down:
+                    if action_name == "select_delay_slot":
+                        continue  # Ctrl not held for number keys
+                    if vk in (VK_OEM_PLUS, VK_OEM_MINUS):
+                        data["delta"] = 1 if vk == VK_OEM_PLUS else -1
+                        _queue_action(action_name, data)
+                    else:
+                        _queue_action(action_name, data)
+    except Exception as e:
+        _log(f"Shortcut poll error: {e}")
 
-            action = None
-            data = {}
-
-            if vk == VK_F1:
-                action = "show_status"
-            if vk == VK_F5:
-                action = "cycle_profile"
-                _log(f"KB hook: F5 down, now={now_ms}, blocked_until={_kb_blocked_until}")
-            elif vk == VK_F6:
-                action = "toggle_trigger_block"
-            elif vk == VK_F7:
-                action = "cycle_mode"
-            elif vk == VK_F8:
-                action = "toggle_recoil"
-            elif vk == VK_F12:
-                action = "toggle_listener"
-                _log(f"KB hook: F12 down, now={now_ms}, blocked_until={_kb_blocked_until}")
-            elif vk == 0x31 and ctrl_down:
-                action = "select_delay_slot"
-                data["slot"] = 0
-            elif vk == 0x32 and ctrl_down:
-                action = "select_delay_slot"
-                data["slot"] = 1
-            elif vk == 0x33 and ctrl_down:
-                action = "select_delay_slot"
-                data["slot"] = 2
-            elif vk == 0x34 and ctrl_down:
-                action = "select_delay_slot"
-                data["slot"] = 3
-            elif vk == 0xBB and not ctrl_down:
-                action = "delay_adjust"
-                data["delta"] = 1
-            elif vk == 0xBD and not ctrl_down:
-                action = "delay_adjust"
-                data["delta"] = -1
-            elif vk == 0xBB and ctrl_down:
-                action = "recoil_adjust"
-                data["delta"] = 1
-            elif vk == 0xBD and ctrl_down:
-                action = "recoil_adjust"
-                data["delta"] = -1
-
-            if action:
-                _kb_blocked_until = now_ms + 250
-                _queue_action(action, data)
-
-        return ctypes.windll.user32.CallNextHookEx(None, nCode, wParam, lParam)
-    return callback
-
-def start_keyboard_hook():
-    global _kb_hook, _kb_hook_proc, _kb_hook_thread, _kb_hook_thread_id
-    if _kb_hook:
+def start_shortcut_polling():
+    global _shortcut_running, _shortcut_thread, _shortcut_prev
+    if _shortcut_running:
         return
-    cb = _make_keyboard_callback()
-    _kb_hook_proc = KBHOOKPROC(cb)
-    _kb_hook = ctypes.windll.user32.SetWindowsHookExA(WH_KEYBOARD_LL, _kb_hook_proc, None, 0)
-    if not _kb_hook:
-        _log("Failed to set keyboard hook!")
-        _kb_hook_proc = None
-        return
+    _shortcut_running = True
+    _shortcut_prev = {}
+    def _loop():
+        while _shortcut_running:
+            _shortcut_poll()
+            time.sleep(SHORTCUT_POLL_MS / 1000.0)
+    _shortcut_thread = threading.Thread(target=_loop, daemon=True)
+    _shortcut_thread.start()
+    _log("Shortcut polling started")
 
-    def _kb_msg_loop():
-        global _kb_hook_thread_id
-        _kb_hook_thread_id = ctypes.windll.kernel32.GetCurrentThreadId()
-        msg = MSG()
-        while _kb_hook:
-            ret = ctypes.windll.user32.GetMessageA(ctypes.byref(msg), None, 0, 0)
-            if ret == 0:
-                break
-            ctypes.windll.user32.TranslateMessage(ctypes.byref(msg))
-            ctypes.windll.user32.DispatchMessageA(ctypes.byref(msg))
-
-    _kb_hook_thread = threading.Thread(target=_kb_msg_loop, daemon=True)
-    _kb_hook_thread.start()
-    _log("Keyboard hook started")
-
-def stop_keyboard_hook():
-    global _kb_hook, _kb_hook_proc
-    if _kb_hook:
-        ctypes.windll.user32.UnhookWindowsHookEx(_kb_hook)
-        _kb_hook = None
-    _kb_hook_proc = None
-    if _kb_hook_thread_id:
-        ctypes.windll.user32.PostThreadMessageA(_kb_hook_thread_id, 0x0012, 0, 0)
-    _log("Keyboard hook stopped")
+def stop_shortcut_polling():
+    global _shortcut_running
+    _shortcut_running = False
+    _shortcut_thread = None
+    _log("Shortcut polling stopped")
 
 # --- Hook Callback ---
 HOOKPROC = ctypes.WINFUNCTYPE(ctypes.c_long, ctypes.c_int, ctypes.c_long, ctypes.POINTER(ctypes.c_long))

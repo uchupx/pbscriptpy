@@ -647,8 +647,8 @@ root.bind("<F12>", lambda e: on_f12())
 # Poll queues
 root.after(100, poll_queues)
 
-# Start keyboard hook (always-on, independent of listener)
-core.start_keyboard_hook()
+# Start shortcut polling thread (always-on, independent of listener)
+core.start_shortcut_polling()
 
 # Cleanup
 atexit.register(core.stop_listener)
@@ -656,7 +656,7 @@ atexit.register(core.stop_listener)
 # Fix window close
 def on_close():
     core.stop_listener()
-    core.stop_keyboard_hook()
+    core.stop_shortcut_polling()
     root.destroy()
 
 root.protocol("WM_DELETE_WINDOW", on_close)
