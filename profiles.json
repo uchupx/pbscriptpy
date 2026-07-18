@@ -39,7 +39,27 @@
       "key_hold_delay": 40,
       "recoil": true,
       "recoil_amount": 4
+    },
+    {
+      "name": "ss3",
+      "mode": "ar_smg",
+      "trigger": "xbutton2",
+      "sniper_delays": [
+        50,
+        50,
+        50,
+        50
+      ],
+      "shotgun_delays": [
+        50,
+        50
+      ],
+      "ar_smg_delay": 43,
+      "switch_method": "qq",
+      "key_hold_delay": 40,
+      "recoil": true,
+      "recoil_amount": 9
     }
   ],
-  "active": 1
+  "active": 2
 }

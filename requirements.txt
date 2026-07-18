@@ -1,2 +1,1 @@
-nicegui
-pywebview
+# No external dependencies - tkinter is stdlib on Windows

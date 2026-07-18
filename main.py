@@ -1,17 +1,23 @@
-# main.py - NiceGUI version with profiles
-# ponytail: flat layout, dark theme, no class tax
+# main.py - tkinter UI for PB Script Macro
+# ponytail: flat layout, no class tax, stdlib only
 
-from nicegui import app, ui
+import sys
+import tkinter as tk
+from tkinter import ttk, messagebox, simpledialog
 import core
 from config import DEFAULT
 from queue import Queue
 import atexit
 import json
 import os
+import threading
+import time
 
 # --- Constants ---
 TRIGGER_OPTIONS = {"L-Click": "lclick", "X Button Forward": "xbutton1", "X Button Backward": "xbutton2"}
+TRIGGER_TO_LABEL = {v: k for k, v in TRIGGER_OPTIONS.items()}
 MODE_OPTIONS = {"Sniper": "sniper", "AR / SMG": "ar_smg", "Shotgun": "shotgun"}
+MODE_TO_LABEL = {v: k for k, v in MODE_OPTIONS.items()}
 PROFILES_FILE = "profiles.json"
 
 PROFILE_TEMPLATE = {
@@ -28,31 +34,12 @@ PROFILE_TEMPLATE = {
 # --- State ---
 log_queue = Queue()
 status_queue = Queue()
-delay_sliders = []
-key_hold_slider = None
-switch_radio = None
-recoil_check = None
-recoil_slider = None
-mode_select = None
-trigger_select = None
-start_btn = None
-stop_btn = None
-status_label = None
-log_area = None
-delay_container = None
-recoil_card = None
-key_hold_card = None
-switch_card = None
-profile_dropdown = None
-profile_name_input = None
-
-# Profile state
 profiles = []
 active_idx = 0
 _save_timer = None
 _loading_profile = False
 
-# --- Core callbacks (thread-safe via queue) ---
+# --- Core callbacks ---
 def _log(msg):
     log_queue.put(msg)
 
@@ -65,371 +52,424 @@ core.set_status_callback(_status)
 # ===================== PROFILE ENGINE =====================
 
 def _profile_path():
-    return os.path.join(os.path.dirname(os.path.abspath(__file__)), PROFILES_FILE)
+    if getattr(sys, 'frozen', False):
+        base = os.path.dirname(os.path.abspath(sys.executable))
+    else:
+        base = os.path.dirname(os.path.abspath(__file__))
+    return os.path.join(base, PROFILES_FILE)
 
 def load_profiles():
     global profiles, active_idx
     path = _profile_path()
     if os.path.exists(path):
-        with open(path) as f:
-            data = json.load(f)
-        profiles = data.get("profiles", [])
-        active_idx = data.get("active", 0)
-        if active_idx >= len(profiles):
-            active_idx = 0
+        try:
+            with open(path, 'r', encoding='utf-8') as f:
+                data = json.load(f)
+            profiles = data.get("profiles", [])
+            active_idx = data.get("active", 0)
+            if active_idx >= len(profiles):
+                active_idx = 0
+        except Exception as e:
+            _log(f"Load failed: {e}")
+            profiles = []
     if not profiles:
-        profiles = [dict(PROFILE_TEMPLATE, name="Default")]
+        profiles.append(dict(PROFILE_TEMPLATE, name="Default"))
         active_idx = 0
-        _write_profiles()
 
-def _write_profiles():
+def save_profiles():
     path = _profile_path()
-    with open(path, "w") as f:
-        json.dump({"profiles": profiles, "active": active_idx}, f, indent=2)
+    try:
+        with open(path, 'w', encoding='utf-8') as f:
+            json.dump({"profiles": profiles, "active": active_idx}, f, indent=2)
+    except Exception as e:
+        _log(f"Save failed: {e}")
+
+def _schedule_save():
+    global _save_timer
+    if _save_timer:
+        root.after_cancel(_save_timer)
+    _save_timer = root.after(3000, _do_save)
+
+def _do_save():
+    global _save_timer
+    _save_timer = None
+    was = core.is_listening()
+    if was:
+        core.stop_listener()
+    save_profiles()
+    if was:
+        core.start_listener()
+    _log("Profiles saved")
 
 def _profile_list():
     return [p["name"] for p in profiles]
 
-def _ensure_active():
-    global active_idx
-    if active_idx >= len(profiles):
-        active_idx = max(0, len(profiles) - 1)
-
 def apply_profile(idx):
-    """Load profile idx settings into UI and core."""
-    global active_idx, _loading_profile
-    if idx < 0 or idx >= len(profiles):
-        return
-    active_idx = idx
+    global _loading_profile, active_idx
     _loading_profile = True
+    active_idx = idx
     p = profiles[idx]
+    mode_var.set(MODE_TO_LABEL.get(p["mode"], "Sniper"))
+    trigger_var.set(TRIGGER_TO_LABEL.get(p["trigger"], "X Button Forward"))
+    switch_var.set("qq" if p["switch_method"] == "qq" else "31")
 
-    mode_select.value = next(k for k, v in MODE_OPTIONS.items() if v == p["mode"])
-    trigger_select.value = next(k for k, v in TRIGGER_OPTIONS.items() if v == p["trigger"])
+    # Rebuild delay sliders for current mode
+    rebuild_delays()
 
-    # Force rebuild delays + card visibility (on_change may not fire if same mode)
-    on_mode_change()
+    key_hold_var.set(p["key_hold_delay"])
+    recoil_var.set(p["recoil"])
+    recoil_amt_var.set(p["recoil_amount"])
 
-    # Fill delays based on current mode
-    mk = p["mode"]
-    if mk == "sniper":
-        vals = p.get("sniper_delays", [50, 50, 50, 50])
-        for i, v in enumerate(vals):
-            if i < len(delay_sliders):
-                delay_sliders[i].value = v
-    elif mk == "shotgun":
-        vals = p.get("shotgun_delays", [50, 50])
-        for i, v in enumerate(vals):
-            if i < len(delay_sliders):
-                delay_sliders[i].value = v
-    else:
-        if delay_sliders:
-            delay_sliders[0].value = p.get("ar_smg_delay", 80)
-
-    switch_radio.value = "QQ (quick switch)" if p.get("switch_method", "qq") == "qq" else "31 (slot switch)"
-    key_hold_slider.value = p.get("key_hold_delay", 40)
-    recoil_check.value = p.get("recoil", True)
-    recoil_slider.value = p.get("recoil_amount", 4)
-
-    # Sync core config immediately so running macro picks it up
     _sync_core()
-
-    _update_dropdown()
     _loading_profile = False
 
-def _snap_ui_to_profile():
-    """Read all UI controls into the current profile dict."""
-    if active_idx >= len(profiles):
-        return
-    p = profiles[active_idx]
-    mk = MODE_OPTIONS[mode_select.value]
-    p["mode"] = mk
-    p["trigger"] = TRIGGER_OPTIONS[trigger_select.value]
-    p["switch_method"] = "qq" if switch_radio.value == "QQ (quick switch)" else "31"
-    p["key_hold_delay"] = key_hold_slider.value
-
-    if mk == "sniper":
-        p["sniper_delays"] = [s.value for s in delay_sliders]
-    elif mk == "shotgun":
-        p["shotgun_delays"] = [s.value for s in delay_sliders]
-    else:
-        p["ar_smg_delay"] = delay_sliders[0].value if delay_sliders else 80
-
-    p["recoil"] = recoil_check.value
-    p["recoil_amount"] = recoil_slider.value
-
-def _sync_core():
-    """Push UI values to core config immediately."""
-    mk = MODE_OPTIONS[mode_select.value]
-    core.set_config("mode", mk)
-    core.set_config("trigger", TRIGGER_OPTIONS[trigger_select.value])
-    core.set_config("switch_method", "qq" if switch_radio.value == "QQ (quick switch)" else "31")
-    core.set_config("key_hold_delay", key_hold_slider.value)
-    if mk == "sniper":
-        core.set_config("sniper_delays", [s.value for s in delay_sliders])
-    elif mk == "shotgun":
-        core.set_config("shotgun_delays", [s.value for s in delay_sliders])
-    else:
-        core.set_config("ar_smg_delay", delay_sliders[0].value if delay_sliders else 80)
-    core.set_config("recoil", recoil_check.value)
-    core.set_config("recoil_amount", recoil_slider.value)
-
-def _update_dropdown():
-    names = _profile_list()
-    profile_dropdown.options = names
-    profile_dropdown.value = names[active_idx] if names else ""
-
-# --- Profile CRUD ---
+def on_profile_select(name):
+    for i, p in enumerate(profiles):
+        if p["name"] == name:
+            apply_profile(i)
+            break
 
 def add_profile():
     global active_idx
     base = "New Profile"
-    names = _profile_list()
-    i = 1
-    while base in names:
-        base = f"New Profile ({i})"
-        i += 1
-    profiles.append(dict(PROFILE_TEMPLATE, name=base))
+    names = {p["name"] for p in profiles}
+    name = base
+    n = 2
+    while name in names:
+        name = f"{base} ({n})"
+        n += 1
+    profiles.append(dict(PROFILE_TEMPLATE, name=name))
     active_idx = len(profiles) - 1
+    _refresh_profile_dropdown()
     apply_profile(active_idx)
-    _write_profiles()
-    _log(f"Profile '{base}' created")
-
-async def _rename_handler():
-    if active_idx >= len(profiles):
-        return
-    p = profiles[active_idx]
-    with ui.dialog() as dlg, ui.card():
-        ui.label("Rename Profile").classes("text-h6")
-        inp = ui.input("Name", value=p["name"]).classes("w-full")
-        with ui.row().classes("justify-end w-full gap-2"):
-            ui.button("Cancel", on_click=dlg.close)
-            ui.button("Save", on_click=lambda: dlg.submit(inp.value))
-    name = await dlg
-    if name and name.strip():
-        profiles[active_idx]["name"] = name.strip()
-        _write_profiles()
-        _update_dropdown()
-        _log(f"Profile renamed to '{name.strip()}'")
+    _schedule_save()
 
 def delete_profile():
+    global active_idx
     if len(profiles) <= 1:
-        _log("Cannot delete last profile")
         return
-    if active_idx >= len(profiles):
+    p = profiles[active_idx]
+    if not messagebox.askyesno("Delete", f"Delete '{p['name']}'?"):
         return
-    name = profiles[active_idx]["name"]
     profiles.pop(active_idx)
-    _ensure_active()
+    if active_idx >= len(profiles):
+        active_idx = len(profiles) - 1
+    _refresh_profile_dropdown()
     apply_profile(active_idx)
-    _write_profiles()
-    _log(f"Profile '{name}' deleted")
+    _schedule_save()
+
+def rename_profile():
+    global _loading_profile
+    p = profiles[active_idx]
+    new = simpledialog.askstring("Rename", "New name:", initialvalue=p["name"])
+    if new and new.strip() and new.strip() != p["name"]:
+        p["name"] = new.strip()
+        _refresh_profile_dropdown()
+        _schedule_save()
+
+def _refresh_profile_dropdown():
+    menu = profile_dropdown["menu"]
+    menu.delete(0, "end")
+    for p in profiles:
+        menu.add_command(label=p["name"], command=lambda n=p["name"]: on_profile_select(n))
+    profile_var.set(p["name"] if active_idx < len(profiles) else "")
 
 def export_profiles():
-    path = _profile_path()
-    # Save current UI to profile first
-    _snap_ui_to_profile()
-    _write_profiles()
-    # Trigger download
-    app.download(path)
+    path = _profile_path().replace(".json", "_export.json")
+    try:
+        with open(path, 'w', encoding='utf-8') as f:
+            json.dump({"profiles": profiles, "active": active_idx}, f, indent=2)
+        _log(f"Exported to {os.path.basename(path)}")
+    except Exception as e:
+        _log(f"Export failed: {e}")
 
-def on_profile_select(name):
-    global _loading_profile
-    idx = _profile_list().index(name)
-    if idx == active_idx:
-        return
-    apply_profile(idx)
-    _schedule_save()
+# ===================== SYNCE =====================
 
-def cycle_profile():
-    """Cycle to next profile."""
-    if len(profiles) <= 1:
-        return
-    nxt = (active_idx + 1) % len(profiles)
-    apply_profile(nxt)
-    _schedule_save()
-    _log(f"Switched to '{profiles[nxt]['name']}'")
+def _sync_core():
+    p = profiles[active_idx]
+    core.set_config("mode", p["mode"])
+    core.set_config("trigger", p["trigger"])
+    core.set_config("switch_method", p["switch_method"])
+    core.set_config("key_hold_delay", p["key_hold_delay"])
+    core.set_config("recoil", p["recoil"])
+    core.set_config("recoil_amount", p["recoil_amount"])
+    if p["mode"] == "sniper":
+        core.set_config("sniper_delays", p["sniper_delays"])
+    elif p["mode"] == "shotgun":
+        core.set_config("shotgun_delays", p["shotgun_delays"])
+    elif p["mode"] == "ar_smg":
+        core.set_config("ar_smg_delay", p["ar_smg_delay"])
 
-# ===================== AUTO-SAVE =====================
+# ===================== DELAY SLIDERS =====================
 
-def _cancel_save():
-    global _save_timer
-    if _save_timer:
-        _save_timer.deactivate()
-        _save_timer = None
+def rebuild_delays():
+    for w in delay_widgets:
+        w.destroy()
+    delay_widgets.clear()
 
-def _schedule_save():
-    _cancel_save()
-    global _save_timer
-    _save_timer = ui.timer(3.0, _do_auto_save, once=True)
+    p = profiles[active_idx]
+    mode = p["mode"]
+    if mode == "sniper":
+        labels = ["Scope→Fire", "Fire→Close", "Close→Switch", "Between keys"]
+        keys = p["sniper_delays"]
+    elif mode == "shotgun":
+        labels = ["Fire→Switch"]
+        keys = p["shotgun_delays"]
+    else:  # ar_smg
+        labels = ["Fire rate"]
+        keys = [p["ar_smg_delay"]]
 
-def _do_auto_save():
-    global _save_timer
-    _save_timer = None
-    was_running = not start_btn.enabled
-    _snap_ui_to_profile()
-    _sync_core()
-    _write_profiles()
-    if was_running:
-        on_stop()
-        ui.timer(0.3, on_start, once=True)
+    for i, label in enumerate(labels):
+        frame = ttk.Frame(delay_frame)
+        frame.pack(fill="x", pady=2)
+        ttk.Label(frame, text=label, width=14).pack(side="left")
+        var = tk.IntVar(value=keys[i])
+        delay_vars.append(var)
+        s = ttk.Scale(frame, from_=0, to=200, orient="horizontal",
+                      variable=var, command=lambda v, idx=i: _on_delay_change(idx, v))
+        s.pack(side="left", fill="x", expand=True, padx=5)
+        lbl = ttk.Label(frame, text=str(keys[i]), width=4)
+        lbl.pack(side="right")
+        delay_labels.append(lbl)
+        delay_widgets.append(frame)
 
-def on_setting_change():
-    """Called from any control change to trigger auto-save."""
+def _on_delay_change(idx, val):
+    val = int(float(val))
+    delay_labels[idx].configure(text=str(val))
+    if not _loading_profile:
+        p = profiles[active_idx]
+        mode = p["mode"]
+        vals = [int(float(v.get())) for v in delay_vars]
+        if mode == "sniper":
+            p["sniper_delays"] = vals[:4]
+        elif mode == "shotgun":
+            p["shotgun_delays"] = vals[:2]
+        else:
+            p["ar_smg_delay"] = vals[0]
+        _sync_core()
+        _schedule_save()
+
+# ===================== UI CONTROLS =====================
+
+def on_mode_change(*args):
     if _loading_profile:
         return
+    label = mode_var.get()
+    p = profiles[active_idx]
+    p["mode"] = MODE_OPTIONS.get(label, "sniper")
+    rebuild_delays()
     _sync_core()
     _schedule_save()
 
-# ===================== UI BUILDING =====================
+def on_trigger_change(*args):
+    if _loading_profile:
+        return
+    label = trigger_var.get()
+    profiles[active_idx]["trigger"] = TRIGGER_OPTIONS.get(label, "xbutton1")
+    _sync_core()
+    _schedule_save()
 
-# --- Poll queues from UI thread ---
-def poll_queues():
-    while not log_queue.empty():
-        log_area.push(log_queue.get_nowait())
-    while not status_queue.empty():
-        status_label.set_text(status_queue.get_nowait())
+def on_switch_change(*args):
+    if _loading_profile:
+        return
+    profiles[active_idx]["switch_method"] = "qq" if switch_var.get() == "qq" else "31"
+    _sync_core()
+    _schedule_save()
 
-# --- Dynamic delay sliders ---
-def rebuild_delays():
-    delay_container.clear()
-    delay_sliders.clear()
-    mk = MODE_OPTIONS[mode_select.value]
-    if mk == "sniper":
-        labels = ["Scope -> Fire", "Fire -> Close scope", "Close scope -> Switch", "Between switch keys"]
-        defs = core.get_config("sniper_delays")
-    elif mk == "shotgun":
-        labels = ["Fire -> Switch", "Between switch keys"]
-        defs = core.get_config("shotgun_delays")
-    else:
-        labels = ["Between clicks"]
-        defs = [core.get_config("ar_smg_delay")]
-    with delay_container:
-        for label, default in zip(labels, defs):
-            max_val = 100 if "switch" in label.lower() else 200
-            with ui.row().classes("items-center w-full"):
-                ui.label(label).classes("w-44")
-                s = ui.slider(min=0, max=max_val, step=1, value=default, on_change=lambda _: on_setting_change()).props("label-always").classes("flex-grow")
-                delay_sliders.append(s)
+def on_key_hold_change(val):
+    if _loading_profile:
+        return
+    profiles[active_idx]["key_hold_delay"] = int(float(val))
+    _sync_core()
+    _schedule_save()
 
-# --- Mode change ---
-def on_mode_change():
-    mk = MODE_OPTIONS[mode_select.value]
-    is_ar = mk == "ar_smg"
-    rebuild_delays()
-    recoil_card.visible = is_ar
-    key_hold_card.visible = not is_ar
-    switch_card.visible = not is_ar
-    if not _loading_profile:
-        on_setting_change()
+def on_recoil_toggle():
+    if _loading_profile:
+        return
+    profiles[active_idx]["recoil"] = recoil_var.get()
+    _sync_core()
+    _schedule_save()
 
-# --- Start / Stop ---
+def on_recoil_amt_change(val):
+    if _loading_profile:
+        return
+    profiles[active_idx]["recoil_amount"] = int(float(val))
+    _sync_core()
+    _schedule_save()
+
 def on_start():
     _sync_core()
-    start_btn.enabled = False
-    stop_btn.enabled = True
-    mode_select.enabled = False
-    trigger_select.enabled = False
+    start_btn.config(state="disabled")
+    stop_btn.config(state="normal")
     core.start_listener()
+    _status("Running")
 
 def on_stop():
     core.stop_listener()
-    start_btn.enabled = True
-    stop_btn.enabled = False
-    mode_select.enabled = True
-    trigger_select.enabled = True
+    start_btn.config(state="normal")
+    stop_btn.config(state="disabled")
     _status("Idle")
 
-# --- Keyboard ---
-def on_key(e):
-    if e.key == "F5" and e.action.keydown:
-        cycle_profile()
+def on_f5():
+    global active_idx
+    if not profiles:
+        return
+    active_idx = (active_idx + 1) % len(profiles)
+    _refresh_profile_dropdown()
+    apply_profile(active_idx)
+
+def poll_queues():
+    while not log_queue.empty():
+        msg = log_queue.get_nowait()
+        log_text.insert("end", msg + "\n")
+        log_text.see("end")
+    while not status_queue.empty():
+        status_var.set(status_queue.get_nowait())
+    root.after(100, poll_queues)
 
 # ===================== BUILD UI =====================
 
-# Load profiles first
-load_profiles()
+root = tk.Tk()
+root.title("PB Script Macro")
+root.geometry("620x700")
+root.minsize(500, 600)
+root.configure(bg="#1e1e1e")
 
-with ui.header(elevated=True).classes("items-center justify-between"):
-    ui.label("PB Script Macro").classes("text-h6 font-bold")
-    ui.space()
-    ui.icon("sports_esports", size="32px")
+style = ttk.Style()
+style.theme_use("clam")
+style.configure("TLabel", background="#1e1e1e", foreground="#ffffff")
+style.configure("TFrame", background="#1e1e1e")
+style.configure("TLabelframe", background="#1e1e1e", foreground="#ffffff")
+style.configure("TLabelframe.Label", background="#1e1e1e", foreground="#ffffff")
+style.configure("TButton", background="#333333", foreground="#ffffff")
+style.configure("TScale", background="#1e1e1e")
+style.configure("TRadiobutton", background="#1e1e1e", foreground="#ffffff")
+style.configure("TCheckbutton", background="#1e1e1e", foreground="#ffffff")
+style.map("TButton", background=[("active", "#555555")])
 
-with ui.column().classes("w-full max-w-3xl mx-auto p-4 gap-4"):
-    # Profile section
-    with ui.card().classes("w-full"):
-        ui.label("Profiles").classes("font-bold")
-        with ui.row().classes("items-center w-full gap-2"):
-            ui.icon("folder", size="20px")
-            profile_dropdown = ui.select(_profile_list(), value=_profile_list()[active_idx] if profiles else "",
-                                         on_change=lambda e: on_profile_select(e.value)).classes("flex-grow")
-            ui.button(icon="edit", on_click=_rename_handler).props("flat dense")
-            ui.button(icon="delete", on_click=delete_profile).props("flat dense color=negative")
-            ui.button(icon="add", on_click=add_profile).props("flat dense color=positive")
-        with ui.row().classes("w-full"):
-            ui.space()
-            ui.button("Export All", icon="download", on_click=export_profiles).props("flat dense")
+# Profile section
+prof_frame = ttk.LabelFrame(root, text="Profile", padding=5)
+prof_frame.pack(fill="x", padx=10, pady=(10, 2))
 
-    # Mode & Trigger
-    with ui.card().classes("w-full"):
-        with ui.row().classes("w-full items-center gap-4"):
-            ui.label("Mode").classes("font-bold")
-            mode_select = ui.select(list(MODE_OPTIONS.keys()), value="Sniper", on_change=on_mode_change).classes("flex-grow")
-            ui.label("Trigger").classes("font-bold")
-            trigger_select = ui.select(list(TRIGGER_OPTIONS.keys()), value="X Button Forward", on_change=lambda _: on_setting_change()).classes("flex-grow")
+prof_row = ttk.Frame(prof_frame)
+prof_row.pack(fill="x")
+profile_var = tk.StringVar()
+profile_dropdown = ttk.OptionMenu(prof_row, profile_var, "", *[], command=on_profile_select)
+profile_dropdown.pack(side="left", fill="x", expand=True, padx=(0, 5))
+ttk.Button(prof_row, text="Rename", command=rename_profile, width=7).pack(side="left", padx=1)
+ttk.Button(prof_row, text="Delete", command=delete_profile, width=7).pack(side="left", padx=1)
+ttk.Button(prof_row, text="+Add", command=add_profile, width=7).pack(side="left", padx=1)
 
-    # Switch Method
-    with ui.card().classes("w-full") as switch_card:
-        ui.label("Switch Method").classes("font-bold")
-        switch_radio = ui.radio(["QQ (quick switch)", "31 (slot switch)"], value="QQ (quick switch)", on_change=lambda _: on_setting_change()).props("inline")
+export_row = ttk.Frame(prof_frame)
+export_row.pack(fill="x", pady=(4, 0))
+ttk.Button(export_row, text="Export All", command=export_profiles).pack(side="right")
 
-    # Delay Sliders
-    with ui.card().classes("w-full"):
-        ui.label("Delays (ms)").classes("font-bold")
-        delay_container = ui.column().classes("w-full gap-1")
+# Mode & Trigger
+mode_frame = ttk.LabelFrame(root, text="Mode & Trigger", padding=5)
+mode_frame.pack(fill="x", padx=10, pady=2)
 
-    # Key Hold Time
-    with ui.card().classes("w-full") as key_hold_card:
-        ui.label("Key Hold Time (ms)").classes("font-bold")
-        with ui.row().classes("items-center w-full"):
-            ui.label("Hold duration:").classes("w-32")
-            key_hold_slider = ui.slider(min=0, max=200, step=1, value=core.get_config("key_hold_delay"),
-                                        on_change=lambda _: on_setting_change()).props("label-always").classes("flex-grow")
+mode_row = ttk.Frame(mode_frame)
+mode_row.pack(fill="x")
+ttk.Label(mode_row, text="Mode:").pack(side="left")
+mode_var = tk.StringVar()
+mode_dropdown = ttk.Combobox(mode_row, textvariable=mode_var, values=list(MODE_OPTIONS.keys()), state="readonly", width=20)
+mode_dropdown.pack(side="left", padx=5)
+mode_dropdown.bind("<<ComboboxSelected>>", on_mode_change)
 
-    # Recoil Control
-    with ui.card().classes("w-full") as recoil_card:
-        ui.label("Recoil Control (AR/SMG)").classes("font-bold")
-        recoil_check = ui.checkbox("Enable recoil pull", value=core.get_config("recoil"), on_change=lambda _: on_setting_change())
-        with ui.row().classes("items-center w-full"):
-            ui.label("Pixels per shot:").classes("w-32")
-            recoil_slider = ui.slider(min=1, max=20, step=1, value=core.get_config("recoil_amount"),
-                                      on_change=lambda _: on_setting_change()).props("label-always").classes("flex-grow")
+ttk.Label(mode_row, text="Trigger:").pack(side="left", padx=(20, 0))
+trigger_var = tk.StringVar()
+trigger_dropdown = ttk.Combobox(mode_row, textvariable=trigger_var, values=list(TRIGGER_OPTIONS.keys()), state="readonly", width=18)
+trigger_dropdown.pack(side="left", padx=5)
+trigger_dropdown.bind("<<ComboboxSelected>>", on_trigger_change)
 
-    # Buttons
-    with ui.row().classes("justify-center gap-4 w-full"):
-        start_btn = ui.button("Start Listener", on_click=on_start, icon="play_arrow").props("size=lg")
-        stop_btn = ui.button("Stop Listener", on_click=on_stop, icon="stop").props("size=lg")
-        stop_btn.enabled = False
+# Switch method
+switch_frame = ttk.LabelFrame(root, text="Switch Method", padding=5)
+switch_frame.pack(fill="x", padx=10, pady=2)
+switch_var = tk.StringVar(value="qq")
+ttk.Radiobutton(switch_frame, text="QQ (quick switch)", variable=switch_var, value="qq", command=on_switch_change).pack(side="left", padx=10)
+ttk.Radiobutton(switch_frame, text="31 (slot switch)", variable=switch_var, value="31", command=on_switch_change).pack(side="left", padx=10)
 
-    # Status
-    status_label = ui.label("Idle").classes("text-center text-h6 text-primary")
+# Delay sliders
+delay_frame_box = ttk.LabelFrame(root, text="Delays (ms)", padding=5)
+delay_frame_box.pack(fill="x", padx=10, pady=2)
+delay_frame = ttk.Frame(delay_frame_box)
+delay_frame.pack(fill="x")
+delay_vars = []
+delay_labels = []
+delay_widgets = []
 
-    # Log
-    with ui.card().classes("w-full"):
-        ui.label("Event Log").classes("font-bold")
-        log_area = ui.log(max_lines=100).classes("w-full h-48")
+# Key hold time
+hold_frame = ttk.LabelFrame(root, text="Key Hold Time (ms)", padding=5)
+hold_frame.pack(fill="x", padx=10, pady=2)
+hold_row = ttk.Frame(hold_frame)
+hold_row.pack(fill="x")
+ttk.Label(hold_row, text="Hold duration:", width=14).pack(side="left")
+key_hold_var = tk.IntVar(value=40)
+hold_scale = ttk.Scale(hold_row, from_=0, to=200, orient="horizontal",
+                       variable=key_hold_var, command=on_key_hold_change)
+hold_scale.pack(side="left", fill="x", expand=True, padx=5)
+hold_val = ttk.Label(hold_row, textvariable=key_hold_var, width=4)
+hold_val.pack(side="right")
 
-# Keyboard handler (global, outside cards so it catches all)
-ui.keyboard(on_key=on_key)
+# Recoil control
+recoil_frame = ttk.LabelFrame(root, text="Recoil Control (AR/SMG)", padding=5)
+recoil_frame.pack(fill="x", padx=10, pady=2)
+recoil_var = tk.BooleanVar(value=True)
+recoil_check = ttk.Checkbutton(recoil_frame, text="Enable recoil pull", variable=recoil_var, command=on_recoil_toggle)
+recoil_check.pack(anchor="w")
+recoil_row = ttk.Frame(recoil_frame)
+recoil_row.pack(fill="x")
+ttk.Label(recoil_row, text="Pixels per shot:", width=14).pack(side="left")
+recoil_amt_var = tk.IntVar(value=4)
+recoil_scale = ttk.Scale(recoil_row, from_=1, to=20, orient="horizontal",
+                         variable=recoil_amt_var, command=on_recoil_amt_change)
+recoil_scale.pack(side="left", fill="x", expand=True, padx=5)
+recoil_amt_label = ttk.Label(recoil_row, textvariable=recoil_amt_var, width=4)
+recoil_amt_label.pack(side="right")
+
+# Buttons
+btn_frame = ttk.Frame(root)
+btn_frame.pack(fill="x", padx=10, pady=5)
+start_btn = ttk.Button(btn_frame, text="Start Listener", command=on_start)
+start_btn.pack(side="left", expand=True, padx=2)
+stop_btn = ttk.Button(btn_frame, text="Stop Listener", command=on_stop, state="disabled")
+stop_btn.pack(side="left", expand=True, padx=2)
+
+# Status
+status_var = tk.StringVar(value="Idle")
+status_label = ttk.Label(root, textvariable=status_var, font=("", 12, "bold"))
+status_label.pack(pady=2)
+
+# Log
+log_frame = ttk.LabelFrame(root, text="Event Log", padding=5)
+log_frame.pack(fill="both", expand=True, padx=10, pady=(2, 10))
+log_text = tk.Text(log_frame, height=10, bg="#2d2d2d", fg="#cccccc",
+                   insertbackground="#ffffff", borderwidth=0, wrap="word")
+log_text.pack(fill="both", expand=True)
+log_scroll = ttk.Scrollbar(log_text, command=log_text.yview)
+log_scroll.pack(side="right", fill="y")
+log_text.configure(yscrollcommand=log_scroll.set)
 
 # --- Init ---
+load_profiles()
+_refresh_profile_dropdown()
 if profiles:
     apply_profile(active_idx)
-else:
-    on_mode_change()
-ui.timer(0.1, poll_queues)
 
-# --- Cleanup ---
+# Keyboard bindings
+root.bind("<F5>", lambda e: on_f5())
+
+# Poll queues
+root.after(100, poll_queues)
+
+# Cleanup
 atexit.register(core.stop_listener)
 
-ui.run(title="PB Script Macro", dark=True, reload=False, native=True, window_size=(800, 750))
+# Fix window close
+def on_close():
+    core.stop_listener()
+    root.destroy()
+
+root.protocol("WM_DELETE_WINDOW", on_close)
+
+root.mainloop()

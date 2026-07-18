@@ -14,3 +14,5 @@
 - [x] Rename profile via dialog
 - [x] New profile with auto-naming (no duplicate names)
 - [x] Sync UI → core config immediately on changes
+- [x] Fix PyInstaller build: wrapped UI in `@ui.page('/')` to avoid script re-exec crash on EXE
+- [x] Fix profiles.json path: use `sys.executable` dir in frozen builds so profiles persist

@@ -1,9 +1,9 @@
 pbscriptpy/
-├── main.py              # NiceGUI UI + profile management
+├── main.py              # tkinter UI + profile management
 ├── core.py              # Hook + SendInput + macro engine
 ├── config.py            # Default settings
 ├── profiles.json        # Auto-saved profile data
-├── requirements.txt     # Python runtime dependencies
+├── requirements.txt
 ├── .github/
 │   └── workflows/
 │       └── build.yml    # GitHub Actions: PyInstaller Windows EXE build
