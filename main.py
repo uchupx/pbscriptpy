@@ -170,7 +170,7 @@ def _refresh_profile_dropdown():
     menu.delete(0, "end")
     for p in profiles:
         menu.add_command(label=p["name"], command=lambda n=p["name"]: on_profile_select(n))
-    profile_var.set(p["name"] if active_idx < len(profiles) else "")
+    profile_var.set(profiles[active_idx]["name"] if active_idx < len(profiles) else "")
 
 def export_profiles():
     path = _profile_path().replace(".json", "_export.json")
@@ -213,7 +213,7 @@ def rebuild_delays():
         labels = ["Scope→Fire", "Fire→Close", "Close→Switch", "Between keys"]
         keys = p["sniper_delays"]
     elif mode == "shotgun":
-        labels = ["Fire→Switch"]
+        labels = ["Fire→Switch", "Between keys"]
         keys = p["shotgun_delays"]
     else:  # ar_smg
         labels = ["Fire rate"]
@@ -318,11 +318,19 @@ def on_f5():
     _refresh_profile_dropdown()
     apply_profile(active_idx)
 
+def on_f12():
+    if core.is_listening():
+        on_stop()
+    else:
+        on_start()
+
 def poll_queues():
     while not log_queue.empty():
         msg = log_queue.get_nowait()
+        log_text.configure(state="normal")
         log_text.insert("end", msg + "\n")
         log_text.see("end")
+        log_text.configure(state="disabled")
     while not status_queue.empty():
         status_var.set(status_queue.get_nowait())
     root.after(100, poll_queues)
@@ -444,7 +452,7 @@ status_label.pack(pady=2)
 log_frame = ttk.LabelFrame(root, text="Event Log", padding=5)
 log_frame.pack(fill="both", expand=True, padx=10, pady=(2, 10))
 log_text = tk.Text(log_frame, height=10, bg="#2d2d2d", fg="#cccccc",
-                   insertbackground="#ffffff", borderwidth=0, wrap="word")
+                   insertbackground="#ffffff", borderwidth=0, wrap="word", state="disabled")
 log_text.pack(fill="both", expand=True)
 log_scroll = ttk.Scrollbar(log_text, command=log_text.yview)
 log_scroll.pack(side="right", fill="y")
@@ -458,6 +466,7 @@ if profiles:
 
 # Keyboard bindings
 root.bind("<F5>", lambda e: on_f5())
+root.bind("<F12>", lambda e: on_f12())
 
 # Poll queues
 root.after(100, poll_queues)

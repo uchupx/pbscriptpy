@@ -99,6 +99,8 @@ _hook_thread_id = None  # FIX: store hook thread ID for wake-up
 _log_callback = None
 _status_callback = None
 _macro_thread = None
+_pb_hwnd = None  # set by main.py so hook knows when PB window is focused
+_trigger_blocked = False  # F12 toggles this; when True, trigger passes through
 
 # --- Input Simulation ---
 
@@ -175,6 +177,9 @@ def _run_shotgun():
     """LClick→delay0→Switch→delay1"""
     try:
         delays = _cfg.get("shotgun_delays", [50, 50])
+        # ponytail: pad if profile was corrupted by earlier bug
+        while len(delays) < 2:
+            delays.append(50)
         method = _cfg.get("switch_method", "qq")
         mouse_click(MOUSEEVENTF_LEFTDOWN, MOUSEEVENTF_LEFTUP, 15)
         if _stop_macro.is_set(): return
@@ -215,6 +220,18 @@ def _finish_macro():
 # --- Hook Callback ---
 HOOKPROC = ctypes.WINFUNCTYPE(ctypes.c_long, ctypes.c_int, ctypes.c_long, ctypes.POINTER(ctypes.c_long))
 
+def set_pb_hwnd(hwnd):
+    global _pb_hwnd
+    _pb_hwnd = hwnd
+
+def toggle_trigger_blocked():
+    global _trigger_blocked
+    _trigger_blocked = not _trigger_blocked
+    return _trigger_blocked
+
+def is_trigger_blocked():
+    return _trigger_blocked
+
 def _make_mouse_callback():
     def callback(nCode, wParam, lParam):
         global _trigger_held, _running, _macro_thread
@@ -250,7 +267,7 @@ def _make_mouse_callback():
 
             block = False
 
-            if is_trigger_down and not _running:
+            if is_trigger_down and not _running and not _trigger_blocked:
                 _running = True
                 _trigger_held = True
                 _stop_macro.clear()
