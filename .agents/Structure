@@ -1,6 +1,6 @@
 pbscriptpy/
-├── main.py              # tkinter UI + profile management
-├── core.py              # Hook + SendInput + macro engine
+├── main.py              # tkinter UI + toast overlay + action dispatcher
+├── core.py              # Hook, SendInput, macro engine, keyboard hook
 ├── config.py            # Default settings
 ├── profiles.json        # Auto-saved profile data
 ├── requirements.txt
@@ -8,9 +8,10 @@ pbscriptpy/
 │   └── workflows/
 │       └── build.yml    # GitHub Actions: PyInstaller Windows EXE build
 ├── docs/
+│   ├── tutorial.md         # User guide (Bahasa Indonesia)
 │   └── superpowers/
-│       ├── specs/       # Design documents
-│       └── plans/       # Implementation plans
+│       ├── specs/          # Design documents
+│       └── plans/          # Implementation plans
 ├── .agents/             # Metadata
 ├── Project.md           # PRD
 ├── .gitignore

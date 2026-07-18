@@ -1,7 +1,8 @@
 - Python 3.x
 - tkinter (stdlib - native Windows GUI)
-- ctypes (Windows API: user32.dll, winmm.dll)
-- threading (async listener)
+- ctypes (Windows API: user32.dll, winmm.dll, kernel32.dll)
+- threading (async listener + keyboard hook)
+- queue.Queue (action dispatch from hook threads to main thread)
 - json (profile storage)
 - os (file path)
 - time (delays)

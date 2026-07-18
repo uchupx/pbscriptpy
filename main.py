@@ -34,10 +34,50 @@ PROFILE_TEMPLATE = {
 # --- State ---
 log_queue = Queue()
 status_queue = Queue()
+action_queue = Queue()
 profiles = []
 active_idx = 0
 _save_timer = None
 _loading_profile = False
+
+# --- Toast System ---
+_toast_window = None
+_toast_timer = None
+
+def show_toast(text):
+    global _toast_window, _toast_timer
+    if _toast_timer:
+        root.after_cancel(_toast_timer)
+        _toast_timer = None
+    if _toast_window is None:
+        _toast_window = tk.Toplevel(root)
+        _toast_window.overrideredirect(True)
+        _toast_window.attributes('-topmost', True)
+        _toast_window.configure(bg='#1e1e1e')
+        _toast_label = tk.Label(
+            _toast_window, text='', font=('Consolas', 10, 'bold'),
+            fg='#ffffff', bg='#1e1e1e', padx=8, pady=4,
+            anchor='w', justify='left'
+        )
+        _toast_label.pack()
+    _toast_label = _toast_window.winfo_children()[0]
+    _toast_label.config(text=text)
+    _toast_window.update_idletasks()
+    w = min(_toast_window.winfo_reqwidth(), root.winfo_screenwidth() - 20)
+    _toast_window.geometry(f'{w}x{_toast_window.winfo_reqheight()}+10+10')
+    _toast_window.deiconify()
+    _toast_timer = root.after(2500, _hide_toast)
+
+def _hide_toast():
+    global _toast_timer
+    _toast_timer = None
+    if _toast_window:
+        _toast_window.withdraw()
+
+_selected_delay_slot = 0
+_selected_recoil = False
+_last_action = ""
+_last_action_time = 0
 
 # --- Core callbacks ---
 def _log(msg):
@@ -48,6 +88,7 @@ def _status(msg):
 
 core.set_log_callback(_log)
 core.set_status_callback(_status)
+core.set_action_callback(lambda name, data: action_queue.put((name, data)))
 
 # ===================== PROFILE ENGINE =====================
 
@@ -86,7 +127,7 @@ def _schedule_save():
     global _save_timer
     if _save_timer:
         root.after_cancel(_save_timer)
-    _save_timer = root.after(3000, _do_save)
+    _save_timer = root.after(500, _do_save)
 
 def _do_save():
     global _save_timer
@@ -197,6 +238,19 @@ def _sync_core():
         core.set_config("shotgun_delays", p["shotgun_delays"])
     elif p["mode"] == "ar_smg":
         core.set_config("ar_smg_delay", p["ar_smg_delay"])
+
+def _get_delay_labels_and_vals(p):
+    mode = p["mode"]
+    if mode == "sniper":
+        labels = ["Scope", "Fire→Close", "Close→Switch", "Betw keys"]
+        vals = p["sniper_delays"]
+    elif mode == "shotgun":
+        labels = ["Fire→Switch", "Betw keys"]
+        vals = p["shotgun_delays"]
+    else:  # ar_smg
+        labels = ["Fire Rate"]
+        vals = [p["ar_smg_delay"]]
+    return labels, vals
 
 # ===================== DELAY SLIDERS =====================
 
@@ -324,6 +378,127 @@ def on_f12():
     else:
         on_start()
 
+# ===================== ACTION HANDLERS (shortcut dispatch) =====================
+
+def _handle_show_status(data):
+    p = profiles[active_idx]
+    mode_label = MODE_TO_LABEL.get(p["mode"], p["mode"])
+    trigger_label = TRIGGER_TO_LABEL.get(p["trigger"], p["trigger"])
+    switch = p["switch_method"].upper()
+    labels, vals = _get_delay_labels_and_vals(p)
+    delays_str = " ".join(f"{l}:{v}" for l, v in zip(labels, vals))
+    rec_str = f"Rec:{p['recoil_amount']}px ON" if p["recoil"] else "Rec:OFF"
+    return f"{mode_label} | {trigger_label} | {switch} | {delays_str} | {rec_str}"
+
+def _handle_cycle_profile(data):
+    global active_idx
+    if len(profiles) <= 1:
+        return None
+    active_idx = (active_idx + 1) % len(profiles)
+    _refresh_profile_dropdown()
+    apply_profile(active_idx)
+    return f"Profile: {profiles[active_idx]['name']}"
+
+def _handle_toggle_trigger_block(data):
+    state = core.toggle_trigger_blocked()
+    return f"Trigger Block: {'ON' if state else 'OFF'}"
+
+def _handle_cycle_mode(data):
+    global _selected_delay_slot
+    order = ["sniper", "shotgun", "ar_smg"]
+    p = profiles[active_idx]
+    idx = order.index(p["mode"]) if p["mode"] in order else 0
+    p["mode"] = order[(idx + 1) % len(order)]
+    _selected_delay_slot = 0
+    rebuild_delays()
+    _sync_core()
+    _schedule_save()
+    return f"Mode: {MODE_TO_LABEL.get(p['mode'], p['mode'])}"
+
+def _handle_toggle_recoil(data):
+    p = profiles[active_idx]
+    p["recoil"] = not p["recoil"]
+    recoil_var.set(p["recoil"])
+    _sync_core()
+    _schedule_save()
+    return f"Recoil: {'ON' if p['recoil'] else 'OFF'}"
+
+def _handle_toggle_listener(data):
+    if core.is_listening():
+        core.stop_listener()
+        start_btn.config(state="normal")
+        stop_btn.config(state="disabled")
+        _status("Idle")
+        return "Listener Stopped"
+    else:
+        _sync_core()
+        core.start_listener()
+        start_btn.config(state="disabled")
+        stop_btn.config(state="normal")
+        _status("Running")
+        return "Listener Started"
+
+def _handle_select_delay_slot(data):
+    global _selected_delay_slot, _selected_recoil
+    p = profiles[active_idx]
+    slot = data["slot"]
+    # AR/SMG: Ctrl+2 selects recoil amount instead of delay slot 1
+    if p["mode"] == "ar_smg" and slot == 1:
+        _selected_recoil = True
+        _log("Selected: Recoil Amount (AR/SMG)")
+        return
+    _selected_recoil = False
+    _, vals = _get_delay_labels_and_vals(p)
+    _selected_delay_slot = max(0, min(slot, len(vals) - 1))
+    _log(f"Slot selected: {_selected_delay_slot} (mode={p['mode']}, delays={len(vals)})")
+
+def _handle_delay_adjust(data):
+    global _selected_delay_slot, _selected_recoil
+    if _selected_recoil:
+        return _handle_recoil_adjust(data)
+    p = profiles[active_idx]
+    mode = p["mode"]
+    labels, vals = _get_delay_labels_and_vals(p)
+    idx = min(_selected_delay_slot, len(vals) - 1)
+    old_val = vals[idx]
+    new_val = max(0, min(200, old_val + data["delta"]))
+    vals[idx] = new_val
+    _log(f"Delay adjust: slot={idx} ({labels[idx]}) {old_val}->{new_val}ms")
+    if mode == "sniper":
+        p["sniper_delays"] = vals[:4]
+    elif mode == "shotgun":
+        p["shotgun_delays"] = vals[:2]
+    else:
+        p["ar_smg_delay"] = vals[0]
+    if idx < len(delay_vars):
+        delay_vars[idx].set(new_val)
+    if idx < len(delay_labels):
+        delay_labels[idx].configure(text=str(new_val))
+    _sync_core()
+    _schedule_save()
+    return f"{labels[idx]}: {new_val}ms"
+
+def _handle_recoil_adjust(data):
+    p = profiles[active_idx]
+    new_val = max(1, min(20, p["recoil_amount"] + data["delta"]))
+    p["recoil_amount"] = new_val
+    recoil_amt_var.set(new_val)
+    _sync_core()
+    _schedule_save()
+    return f"Recoil: {new_val}px"
+
+ACTION_MAP = {
+    "show_status": _handle_show_status,
+    "cycle_profile": _handle_cycle_profile,
+    "toggle_trigger_block": _handle_toggle_trigger_block,
+    "cycle_mode": _handle_cycle_mode,
+    "toggle_recoil": _handle_toggle_recoil,
+    "toggle_listener": _handle_toggle_listener,
+    "select_delay_slot": _handle_select_delay_slot,
+    "delay_adjust": _handle_delay_adjust,
+    "recoil_adjust": _handle_recoil_adjust,
+}
+
 def poll_queues():
     while not log_queue.empty():
         msg = log_queue.get_nowait()
@@ -333,6 +508,19 @@ def poll_queues():
         log_text.configure(state="disabled")
     while not status_queue.empty():
         status_var.set(status_queue.get_nowait())
+    while not action_queue.empty():
+        action, data = action_queue.get_nowait()
+        global _last_action, _last_action_time
+        now = int(time.time() * 1000)
+        if action == _last_action and (now - _last_action_time) < 250:
+            continue
+        _last_action = action
+        _last_action_time = now
+        handler = ACTION_MAP.get(action)
+        if handler:
+            toast_text = handler(data)
+            if toast_text:
+                show_toast(toast_text)
     root.after(100, poll_queues)
 
 # ===================== BUILD UI =====================
@@ -464,12 +652,13 @@ _refresh_profile_dropdown()
 if profiles:
     apply_profile(active_idx)
 
-# Keyboard bindings
-root.bind("<F5>", lambda e: on_f5())
-root.bind("<F12>", lambda e: on_f12())
+# Keyboard bindings (only non-shortcut keys; F5/F12/F1/etc handled by polling thread)
 
 # Poll queues
 root.after(100, poll_queues)
+
+# Start shortcut polling thread (always-on, independent of listener)
+core.start_shortcut_polling()
 
 # Cleanup
 atexit.register(core.stop_listener)
@@ -477,6 +666,7 @@ atexit.register(core.stop_listener)
 # Fix window close
 def on_close():
     core.stop_listener()
+    core.stop_shortcut_polling()
     root.destroy()
 
 root.protocol("WM_DELETE_WINDOW", on_close)
