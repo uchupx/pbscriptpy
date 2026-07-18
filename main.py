@@ -52,11 +52,9 @@ core.set_status_callback(_status)
 # ===================== PROFILE ENGINE =====================
 
 def _profile_path():
-    if getattr(sys, 'frozen', False):
-        base = os.path.dirname(os.path.abspath(sys.executable))
-    else:
-        base = os.path.dirname(os.path.abspath(__file__))
-    return os.path.join(base, PROFILES_FILE)
+    docs = os.path.join(os.path.expanduser("~"), "Documents", "pbscriptpy")
+    os.makedirs(docs, exist_ok=True)
+    return os.path.join(docs, PROFILES_FILE)
 
 def load_profiles():
     global profiles, active_idx
@@ -206,6 +204,8 @@ def rebuild_delays():
     for w in delay_widgets:
         w.destroy()
     delay_widgets.clear()
+    delay_vars.clear()
+    delay_labels.clear()
 
     p = profiles[active_idx]
     mode = p["mode"]
