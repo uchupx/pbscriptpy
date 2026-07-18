@@ -263,11 +263,13 @@ def _make_keyboard_callback():
         if nCode != 0:
             return ctypes.windll.user32.CallNextHookEx(None, nCode, wParam, lParam)
 
-        # Block: skip all shortcuts for 250ms after any shortcut fired
+        # Block: skip all shortcuts for 500ms after any shortcut fired
         global _kb_blocked_until
         if wParam in (WM_KEYDOWN, WM_SYSKEYDOWN):
             now_ms = ctypes.windll.kernel32.GetTickCount()
             if _kb_blocked_until and now_ms < _kb_blocked_until:
+                kb = ctypes.cast(lParam, ctypes.POINTER(KBDLLHOOKSTRUCT)).contents
+                _log(f"KB hook BLOCKED vk={kb.vkCode} now={now_ms} until={_kb_blocked_until}")
                 return ctypes.windll.user32.CallNextHookEx(None, nCode, wParam, lParam)
 
             kb = ctypes.cast(lParam, ctypes.POINTER(KBDLLHOOKSTRUCT)).contents
@@ -279,8 +281,9 @@ def _make_keyboard_callback():
 
             if vk == VK_F1:
                 action = "show_status"
-            elif vk == VK_F5:
+            if vk == VK_F5:
                 action = "cycle_profile"
+                _log(f"KB hook: F5 down, now={now_ms}, blocked_until={_kb_blocked_until}")
             elif vk == VK_F6:
                 action = "toggle_trigger_block"
             elif vk == VK_F7:
@@ -289,6 +292,7 @@ def _make_keyboard_callback():
                 action = "toggle_recoil"
             elif vk == VK_F12:
                 action = "toggle_listener"
+                _log(f"KB hook: F12 down, now={now_ms}, blocked_until={_kb_blocked_until}")
             elif vk == 0x31 and ctrl_down:
                 action = "select_delay_slot"
                 data["slot"] = 0
