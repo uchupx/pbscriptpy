@@ -75,6 +75,7 @@ def _hide_toast():
         _toast_window.withdraw()
 
 _selected_delay_slot = 0
+_selected_recoil = False
 _last_action = ""
 _last_action_time = 0
 
@@ -247,8 +248,7 @@ def _get_delay_labels_and_vals(p):
         labels = ["Fire→Switch", "Betw keys"]
         vals = p["shotgun_delays"]
     else:  # ar_smg
-        switch = p["switch_method"].upper()
-        labels = [switch]
+        labels = ["Fire Rate"]
         vals = [p["ar_smg_delay"]]
     return labels, vals
 
@@ -439,14 +439,23 @@ def _handle_toggle_listener(data):
         return "Listener Started"
 
 def _handle_select_delay_slot(data):
-    global _selected_delay_slot
+    global _selected_delay_slot, _selected_recoil
     p = profiles[active_idx]
+    slot = data["slot"]
+    # AR/SMG: Ctrl+2 selects recoil amount instead of delay slot 1
+    if p["mode"] == "ar_smg" and slot == 1:
+        _selected_recoil = True
+        _log("Selected: Recoil Amount (AR/SMG)")
+        return
+    _selected_recoil = False
     _, vals = _get_delay_labels_and_vals(p)
-    _selected_delay_slot = max(0, min(data["slot"], len(vals) - 1))
+    _selected_delay_slot = max(0, min(slot, len(vals) - 1))
     _log(f"Slot selected: {_selected_delay_slot} (mode={p['mode']}, delays={len(vals)})")
 
 def _handle_delay_adjust(data):
-    global _selected_delay_slot
+    global _selected_delay_slot, _selected_recoil
+    if _selected_recoil:
+        return _handle_recoil_adjust(data)
     p = profiles[active_idx]
     mode = p["mode"]
     labels, vals = _get_delay_labels_and_vals(p)
