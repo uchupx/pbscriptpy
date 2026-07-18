@@ -279,10 +279,13 @@ def _shortcut_poll():
                 # Ctrl+1/2/3/4 or Ctrl+=/-
                 if ctrl_down and vk in (VK_1, VK_2, VK_3, VK_4):
                     data["slot"] = slot
+                    _log(f"Poll: Ctrl+{vk-0x30} → select_delay_slot slot={slot}")
                     _queue_action(action_name, data)
                 elif ctrl_down and vk == VK_OEM_PLUS:
+                    _log("Poll: Ctrl+= → recoil_adjust +1")
                     _queue_action("recoil_adjust", {"delta": 1})
                 elif ctrl_down and vk == VK_OEM_MINUS:
+                    _log("Poll: Ctrl+- → recoil_adjust -1")
                     _queue_action("recoil_adjust", {"delta": -1})
                 # Non-Ctrl shortcuts
                 elif not ctrl_down:
@@ -290,8 +293,10 @@ def _shortcut_poll():
                         continue  # Ctrl not held for number keys
                     if vk in (VK_OEM_PLUS, VK_OEM_MINUS):
                         data["delta"] = 1 if vk == VK_OEM_PLUS else -1
+                        _log("Poll: =/- → delay_adjust delta={}".format(data["delta"]))
                         _queue_action(action_name, data)
                     else:
+                        _log("Poll: vk={:02X} → {}".format(vk, action_name))
                         _queue_action(action_name, data)
     except Exception as e:
         _log(f"Shortcut poll error: {e}")

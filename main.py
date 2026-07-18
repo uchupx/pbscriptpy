@@ -443,6 +443,7 @@ def _handle_select_delay_slot(data):
     p = profiles[active_idx]
     _, vals = _get_delay_labels_and_vals(p)
     _selected_delay_slot = max(0, min(data["slot"], len(vals) - 1))
+    _log(f"Slot selected: {_selected_delay_slot} (mode={p['mode']}, delays={len(vals)})")
 
 def _handle_delay_adjust(data):
     global _selected_delay_slot
@@ -452,6 +453,7 @@ def _handle_delay_adjust(data):
     idx = min(_selected_delay_slot, len(vals) - 1)
     new_val = max(0, min(200, vals[idx] + data["delta"]))
     vals[idx] = new_val
+    _log(f"Delay adjust: slot={idx} ({labels[idx]}) {vals[idx]}->{new_val}ms")
     if mode == "sniper":
         p["sniper_delays"] = vals[:4]
     elif mode == "shotgun":
