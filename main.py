@@ -39,6 +39,40 @@ active_idx = 0
 _save_timer = None
 _loading_profile = False
 
+# --- Toast System ---
+_toast_window = None
+_toast_timer = None
+
+def show_toast(text):
+    global _toast_window, _toast_timer
+    if _toast_timer:
+        root.after_cancel(_toast_timer)
+        _toast_timer = None
+    if _toast_window is None:
+        _toast_window = tk.Toplevel(root)
+        _toast_window.overrideredirect(True)
+        _toast_window.attributes('-topmost', True)
+        _toast_window.configure(bg='#1e1e1e')
+        _toast_label = tk.Label(
+            _toast_window, text='', font=('Consolas', 10, 'bold'),
+            fg='#ffffff', bg='#1e1e1e', padx=8, pady=4,
+            anchor='w', justify='left'
+        )
+        _toast_label.pack()
+    _toast_label = _toast_window.winfo_children()[0]
+    _toast_label.config(text=text)
+    _toast_window.update_idletasks()
+    w = min(_toast_window.winfo_reqwidth(), root.winfo_screenwidth() - 20)
+    _toast_window.geometry(f'{w}x{_toast_window.winfo_reqheight()}+10+10')
+    _toast_window.deiconify()
+    _toast_timer = root.after(2500, _hide_toast)
+
+def _hide_toast():
+    global _toast_timer
+    _toast_timer = None
+    if _toast_window:
+        _toast_window.withdraw()
+
 # --- Core callbacks ---
 def _log(msg):
     log_queue.put(msg)
