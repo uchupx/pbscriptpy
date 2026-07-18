@@ -1,24 +1,33 @@
-No persistent data/schema. In-memory state only:
-
-MacroConfig:
+Profile (JSON file - profiles.json):
+  name: str
   mode: "sniper" | "ar_smg" | "shotgun"
   trigger: "lclick" | "xbutton1" | "xbutton2"
-  delays: list[int]  # per-step delay in ms
-  recoil: bool       # AR/SMG only
+  sniper_delays: list[int] (4 values, 0-200ms)
+  shotgun_delays: list[int] (2 values, 0-200ms)
+  ar_smg_delay: int (0-200ms)
+  switch_method: "qq" | "31"
+  key_hold_delay: int (0-200ms)
+  recoil: bool
+  recoil_amount: int (1-20)
 
-AppState:
+AppState (runtime, in-memory):
   running: bool
   listening: bool
   macro_active: bool
+  trigger_blocked: bool
 
-Profile (JSON file):
-  name: str
-  mode: str
-  trigger: str
-  sniper_delays: list[int]
-  shotgun_delays: list[int]
-  ar_smg_delay: int
-  switch_method: "qq" | "31"
-  key_hold_delay: int
-  recoil: bool
-  recoil_amount: int
+ActionQueue (thread-safe, core.py → main.py):
+  action: str     # show_status, cycle_profile, toggle_trigger_block, cycle_mode, toggle_recoil, toggle_listener, select_delay_slot, delay_adjust, recoil_adjust
+  data: dict      # action-specific payload (slot/delta)
+
+Toast:
+  window: tkinter.Toplevel
+  position: screen top-left (+10+10)
+  duration: 2500ms
+  alpha: 0.85
+  font: Consolas 10 bold
+
+Keyboard Hook:
+  type: WH_KEYBOARD_LL (13)
+  lifecycle: always-on (separate from mouse hook)
+  modifiers: GetAsyncKeyState (Ctrl only)

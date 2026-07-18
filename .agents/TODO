@@ -1,18 +1,7 @@
 # TODO
-- [ ] Test rename dialog properly (async dialog pattern in NiceGUI)
-- [ ] Test export download on native window
-- [ ] Test F5 cycle on native window keyboard focus
-
-## DONE
-- [x] GitHub Actions workflow: PyInstaller Windows EXE build
-- [x] requirements.txt with nicegui + pywebview
-- [x] .gitignore keeps docs/superpowers/ tracked
-- [x] Profile system: save/load/edit/delete/export profiles as JSON
-- [x] Auto-save with 3s debounce on any UI change
-- [x] Auto-restart listener after save if was running
-- [x] F5 keyboard shortcut to cycle profiles
-- [x] Rename profile via dialog
-- [x] New profile with auto-naming (no duplicate names)
-- [x] Sync UI → core config immediately on changes
-- [x] Fix PyInstaller build: wrapped UI in `@ui.page('/')` to avoid script re-exec crash on EXE
-- [x] Fix profiles.json path: use `sys.executable` dir in frozen builds so profiles persist
+- [ ] Test all shortcuts in-game (fullscreen focus)
+- [x] Toast overlay (Toplevel, topmost, alpha, 2.5s auto-hide)
+- [x] Global keyboard hook (WH_KEYBOARD_LL, always-on)
+- [x] Action queue + dispatcher (thread-safe, poll-based)
+- [x] Shortcuts: F1, F5, F6, F7, F8, F12, Ctrl+1-4, =/-, Ctrl+=/-
+- [x] Auto-save debounce: 3000ms → 500ms
