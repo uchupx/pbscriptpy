@@ -294,7 +294,7 @@ def _shortcut_poll():
             (VK_F1, "show_status", None),
             (VK_F2, "show_guide", None),
             (VK_F5, "cycle_profile", None),
-            (VK_F6, "toggle_trigger_block", None),
+            (VK_F6, "cycle_trigger", None),
             (VK_F7, "cycle_mode", None),
             (VK_F12, "toggle_listener", None),
             (VK_1, "select_delay_slot", 0),

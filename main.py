@@ -433,9 +433,16 @@ def _handle_cycle_profile(data):
     apply_profile(active_idx)
     return f"Profile: {profiles[active_idx]['name']}"
 
-def _handle_toggle_trigger_block(data):
-    state = core.toggle_trigger_blocked()
-    return f"Trigger Block: {'ON' if state else 'OFF'}"
+def _handle_cycle_trigger(data):
+    p = profiles[active_idx]
+    order = ["lclick", "xbutton1", "xbutton2"]
+    idx = order.index(p["trigger"]) if p["trigger"] in order else 0
+    new_trigger = order[(idx + 1) % len(order)]
+    p["trigger"] = new_trigger
+    trigger_var.set(TRIGGER_TO_LABEL[new_trigger])
+    _sync_core()
+    _schedule_save()
+    return f"Trigger: {TRIGGER_TO_LABEL[new_trigger]}"
 
 def _handle_cycle_mode(data):
     global _selected_delay_slot
@@ -585,8 +592,10 @@ def _handle_show_guide(data):
         lines.append(f"Ctrl+3:Mode({smooth})  Ctrl+4:Timeout")
     lines.append("")
     lines.append("F1:Status  F2:Guide  F5:Profile")
-    lines.append("F6:Block  F7:Mode  F12:Tog  ^N:New")
-    lines.append("=/-:adjust  ^+/-:adjust(no-slot)")
+    lines.append("F6:Trigger  F7:Mode  F12:Tog  Ctrl+N:New")
+    lines.append("=/-:adjust")
+    if mode == "ar_smg":
+        lines.append("Ctrl+=/-:recoil")
     show_toast("\n".join(lines), duration=4000)
     return None
 
@@ -594,7 +603,7 @@ ACTION_MAP = {
     "show_status": _handle_show_status,
     "show_guide": _handle_show_guide,
     "cycle_profile": _handle_cycle_profile,
-    "toggle_trigger_block": _handle_toggle_trigger_block,
+    "cycle_trigger": _handle_cycle_trigger,
     "cycle_mode": _handle_cycle_mode,
     "toggle_listener": _handle_toggle_listener,
     "add_profile": _handle_add_profile,
