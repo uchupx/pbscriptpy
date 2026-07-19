@@ -49,6 +49,7 @@ VK_3 = 0x33
 VK_4 = 0x34
 VK_OEM_PLUS = 0xBB    # =
 VK_OEM_MINUS = 0xBD   # -
+VK_N = 0x4E           # N
 
 # --- Structures ---
 class MSLLHOOKSTRUCT(ctypes.Structure):
@@ -266,6 +267,7 @@ def _shortcut_poll():
             (VK_2, "select_delay_slot", 1),
             (VK_3, "select_delay_slot", 2),
             (VK_4, "select_delay_slot", 3),
+            (VK_N, "add_profile", None),
             (VK_OEM_PLUS, "delay_adjust", None),
             (VK_OEM_MINUS, "delay_adjust", None),
         ]:
@@ -277,8 +279,12 @@ def _shortcut_poll():
                 ctrl_down = (ctypes.windll.user32.GetAsyncKeyState(VK_CONTROL) & 0x8000) != 0
                 data = {}
 
+                # Ctrl+N → add profile
+                if ctrl_down and vk == VK_N:
+                    _log("Poll: Ctrl+N → add_profile")
+                    _queue_action("add_profile", {})
                 # Ctrl+1/2/3/4 select delay slot
-                if ctrl_down and vk in (VK_1, VK_2, VK_3, VK_4):
+                elif ctrl_down and vk in (VK_1, VK_2, VK_3, VK_4):
                     data["slot"] = slot
                     _slot_selected_at = ctypes.windll.kernel32.GetTickCount()
                     _log(f"Poll: Ctrl+{vk-0x30} → select_delay_slot slot={slot}")

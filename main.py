@@ -438,6 +438,10 @@ def _handle_toggle_listener(data):
         _status("Running")
         return "Listener Started"
 
+def _handle_add_profile(data):
+    add_profile()
+    return f"Profile: {profiles[active_idx]['name']}"
+
 def _handle_select_delay_slot(data):
     global _selected_delay_slot, _selected_recoil
     p = profiles[active_idx]
@@ -494,6 +498,7 @@ ACTION_MAP = {
     "cycle_mode": _handle_cycle_mode,
     "toggle_recoil": _handle_toggle_recoil,
     "toggle_listener": _handle_toggle_listener,
+    "add_profile": _handle_add_profile,
     "select_delay_slot": _handle_select_delay_slot,
     "delay_adjust": _handle_delay_adjust,
     "recoil_adjust": _handle_recoil_adjust,
