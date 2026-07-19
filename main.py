@@ -28,7 +28,7 @@ PROFILE_TEMPLATE = {
     "ar_smg_delay": 80,
     "switch_method": "qq",
     "key_hold_delay": 40,
-    "recoil": True, "recoil_amount": 4,
+    "recoil_amount": 4,
     "recoil_smooth": True,
     "recoil_timeout_ms": 1000,
 }
@@ -112,6 +112,9 @@ def load_profiles():
             for p in profiles:
                 p.setdefault("recoil_smooth", True)
                 p.setdefault("recoil_timeout_ms", 1000)
+                # Migrate old recoil bool → amount=0 for off
+                if "recoil" in p and not p["recoil"] and p.get("recoil_amount", 0) == 4:
+                    p["recoil_amount"] = 0
             active_idx = data.get("active", 0)
             if active_idx >= len(profiles):
                 active_idx = 0
@@ -163,14 +166,14 @@ def apply_profile(idx):
     rebuild_delays()
 
     key_hold_var.set(p["key_hold_delay"])
-    recoil_var.set(p["recoil"])
-    recoil_amt_var.set(p["recoil_amount"])
+    recoil_amt_var.set(p.get("recoil_amount", 0))
     try:
         recoil_timeout_var.set(p.get("recoil_timeout_ms", 1000))
     except NameError:
         pass
     try:
-        if p.get("recoil", False):
+        amt = p.get("recoil_amount", 0)
+        if amt > 0:
             recoil_mode_var.set("Smooth" if p.get("recoil_smooth", True) else "Hold")
         else:
             recoil_mode_var.set("OFF")
@@ -357,25 +360,16 @@ def on_key_hold_change(val):
     _sync_core()
     _schedule_save()
 
-def on_recoil_toggle():
-    if _loading_profile:
-        return
-    p = profiles[active_idx]
-    p["recoil"] = recoil_var.get()
-    try:
-        if p["recoil"]:
-            recoil_mode_var.set("Smooth" if p.get("recoil_smooth", True) else "Hold")
-        else:
-            recoil_mode_var.set("OFF")
-    except NameError:
-        pass
-    _sync_core()
-    _schedule_save()
-
 def on_recoil_amt_change(val):
     if _loading_profile:
         return
-    profiles[active_idx]["recoil_amount"] = int(float(val))
+    p = profiles[active_idx]
+    amt = int(float(val))
+    p["recoil_amount"] = amt
+    try:
+        recoil_mode_var.set("OFF" if amt == 0 else ("Smooth" if p.get("recoil_smooth", True) else "Hold"))
+    except NameError:
+        pass
     _sync_core()
     _schedule_save()
 
@@ -422,8 +416,9 @@ def _handle_show_status(data):
     switch = p["switch_method"].upper()
     labels, vals = _get_delay_labels_and_vals(p)
     delays_str = " ".join(f"{l}:{v}" for l, v in zip(labels, vals))
-    rec_str = f"Rec:{p['recoil_amount']}px ON" if p["recoil"] else "Rec:OFF"
-    if p["mode"] == "ar_smg" and p["recoil"]:
+    amt = p.get("recoil_amount", 0)
+    rec_str = f"Rec:{amt}px" if amt > 0 else "Rec:OFF"
+    if p["mode"] == "ar_smg" and amt > 0:
         mode_name = "Smooth" if p.get("recoil_smooth", True) else "Hold"
         timeout = p.get("recoil_timeout_ms", 1000)
         rec_str += f" {mode_name} T:{timeout}"
@@ -454,35 +449,22 @@ def _handle_cycle_mode(data):
     _schedule_save()
     return f"Mode: {MODE_TO_LABEL.get(p['mode'], p['mode'])}"
 
-def _handle_toggle_recoil(data):
-    p = profiles[active_idx]
-    p["recoil"] = not p["recoil"]
-    recoil_var.set(p["recoil"])
-    try:
-        if p["recoil"]:
-            recoil_mode_var.set("Smooth" if p.get("recoil_smooth", True) else "Hold")
-        else:
-            recoil_mode_var.set("OFF")
-    except NameError:
-        pass
-    _sync_core()
-    _schedule_save()
-    return f"Recoil: {'ON' if p['recoil'] else 'OFF'}"
-
 def _toggle_recoil_mode():
     """Cycle: OFF → Smooth → Hold → OFF. Returns toast text."""
     p = profiles[active_idx]
-    if not p["recoil"]:
-        p["recoil"] = True
+    amount = p.get("recoil_amount", 4)
+    if amount == 0:
+        p["recoil_amount"] = 4
         p["recoil_smooth"] = True
         mode_label = "Smooth"
+        recoil_amt_var.set(4)
     elif p.get("recoil_smooth", True):
         p["recoil_smooth"] = False
         mode_label = "Hold"
     else:
-        p["recoil"] = False
+        p["recoil_amount"] = 0
         mode_label = "OFF"
-    recoil_var.set(p["recoil"])
+        recoil_amt_var.set(0)
     try:
         recoil_mode_var.set(mode_label)
     except NameError:
@@ -593,7 +575,6 @@ ACTION_MAP = {
     "cycle_profile": _handle_cycle_profile,
     "toggle_trigger_block": _handle_toggle_trigger_block,
     "cycle_mode": _handle_cycle_mode,
-    "toggle_recoil": _handle_toggle_recoil,
     "toggle_listener": _handle_toggle_listener,
     "add_profile": _handle_add_profile,
     "select_delay_slot": _handle_select_delay_slot,
@@ -712,14 +693,11 @@ hold_val.pack(side="right")
 # Recoil control
 recoil_frame = ttk.LabelFrame(root, text="Recoil Control (AR/SMG)", padding=5)
 recoil_frame.pack(fill="x", padx=10, pady=2)
-recoil_var = tk.BooleanVar(value=True)
-recoil_check = ttk.Checkbutton(recoil_frame, text="Enable recoil pull", variable=recoil_var, command=on_recoil_toggle)
-recoil_check.pack(anchor="w")
 recoil_row = ttk.Frame(recoil_frame)
 recoil_row.pack(fill="x")
 ttk.Label(recoil_row, text="Pixels per shot:", width=14).pack(side="left")
 recoil_amt_var = tk.IntVar(value=4)
-recoil_scale = ttk.Scale(recoil_row, from_=1, to=20, orient="horizontal",
+recoil_scale = ttk.Scale(recoil_row, from_=0, to=20, orient="horizontal",
                          variable=recoil_amt_var, command=on_recoil_amt_change)
 recoil_scale.pack(side="left", fill="x", expand=True, padx=5)
 recoil_amt_label = ttk.Label(recoil_row, textvariable=recoil_amt_var, width=4)

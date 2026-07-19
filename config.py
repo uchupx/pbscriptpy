@@ -13,7 +13,6 @@ DEFAULT = {
 
     # AR/SMG
     "ar_smg_delay": 80,
-    "recoil": True,
     "recoil_amount": 4,
     "recoil_smooth": True,
     "recoil_timeout_ms": 1000,

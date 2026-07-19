@@ -226,8 +226,8 @@ def _run_ar_smg():
     Recoil: smooth (1px/cycle with step delay) or hold (continues after release)."""
     try:
         delay = _cfg.get("ar_smg_delay", 80)
-        recoil = _cfg.get("recoil", True)
         recoil_amt = _cfg.get("recoil_amount", 4)
+        recoil = recoil_amt > 0
         recoil_smooth = _cfg.get("recoil_smooth", True)
         recoil_timeout = _cfg.get("recoil_timeout_ms", 1000)
         _log("AR/SMG loop started")
@@ -294,7 +294,6 @@ def _shortcut_poll():
             (VK_F5, "cycle_profile", None),
             (VK_F6, "toggle_trigger_block", None),
             (VK_F7, "cycle_mode", None),
-            (VK_F8, "toggle_recoil", None),
             (VK_F12, "toggle_listener", None),
             (VK_1, "select_delay_slot", 0),
             (VK_2, "select_delay_slot", 1),
