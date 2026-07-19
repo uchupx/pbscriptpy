@@ -235,8 +235,9 @@ def _run_ar_smg():
         _log(f"AR/SMG started (recoil={'smooth' if is_smooth else 'hold'})")
 
         step_ms = max(10, delay // max(1, recoil_amt))
+        recoil_started = False  # becomes True on first shot, stays True
+        recoil_active = False   # True = pulling now, False = stopped (hold timeout)
         recoil_elapsed = 0
-        recoil_on = False
 
         while not _stop_macro.is_set():
             if not _trigger_held:
@@ -244,12 +245,18 @@ def _run_ar_smg():
 
             # Click
             mouse_click(MOUSEEVENTF_LEFTDOWN, MOUSEEVENTF_LEFTUP, 15)
-            if has_recoil and not recoil_on:
-                recoil_on = True
-                recoil_elapsed = 0
+
+            # Start recoil on first shot only (hold mode) or every shot (smooth)
+            if has_recoil:
+                if is_smooth:
+                    recoil_active = True
+                elif not recoil_started:
+                    recoil_started = True
+                    recoil_active = True
+                    recoil_elapsed = 0
 
             # Pull recoil gradually
-            if has_recoil and recoil_on:
+            if has_recoil and recoil_active:
                 for _ in range(recoil_amt):
                     if _stop_macro.is_set():
                         break
@@ -257,7 +264,8 @@ def _run_ar_smg():
                     _wait(step_ms)
                     recoil_elapsed += step_ms
                     if not is_smooth and recoil_elapsed >= hold_timeout:
-                        recoil_on = False
+                        recoil_active = False  # PERMANENT — hold timeout reached
+                        _log(f"Hold timeout end")
                         break
 
             if _stop_macro.is_set():
