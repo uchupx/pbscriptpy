@@ -404,6 +404,9 @@ def _make_mouse_callback():
 
             # Only decode xbutton data when needed
             mouse_struct = ctypes.cast(lParam, ctypes.POINTER(MSLLHOOKSTRUCT)).contents
+            # Skip injected input (from our own SendInput) — prevents hook crash loops
+            if mouse_struct.flags & 0x01:
+                return ctypes.windll.user32.CallNextHookEx(None, nCode, wParam, lParam)
             xbtn = (mouse_struct.mouseData >> 16) & 0xFFFF if wParam in (WM_XBUTTONDOWN, WM_XBUTTONUP) else 0
 
             trigger = _cfg["trigger"]
