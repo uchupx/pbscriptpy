@@ -360,7 +360,15 @@ def on_key_hold_change(val):
 def on_recoil_toggle():
     if _loading_profile:
         return
-    profiles[active_idx]["recoil"] = recoil_var.get()
+    p = profiles[active_idx]
+    p["recoil"] = recoil_var.get()
+    try:
+        if p["recoil"]:
+            recoil_mode_var.set("Smooth" if p.get("recoil_smooth", True) else "Hold")
+        else:
+            recoil_mode_var.set("OFF")
+    except NameError:
+        pass
     _sync_core()
     _schedule_save()
 
@@ -450,6 +458,13 @@ def _handle_toggle_recoil(data):
     p = profiles[active_idx]
     p["recoil"] = not p["recoil"]
     recoil_var.set(p["recoil"])
+    try:
+        if p["recoil"]:
+            recoil_mode_var.set("Smooth" if p.get("recoil_smooth", True) else "Hold")
+        else:
+            recoil_mode_var.set("OFF")
+    except NameError:
+        pass
     _sync_core()
     _schedule_save()
     return f"Recoil: {'ON' if p['recoil'] else 'OFF'}"
