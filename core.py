@@ -49,6 +49,7 @@ VK_3 = 0x33
 VK_4 = 0x34
 VK_OEM_PLUS = 0xBB    # =
 VK_OEM_MINUS = 0xBD   # -
+VK_N = 0x4E           # N
 
 # --- Structures ---
 class MSLLHOOKSTRUCT(ctypes.Structure):
@@ -221,19 +222,52 @@ def _run_shotgun():
         _finish_macro()
 
 def _run_ar_smg():
-    """Hold loop: LClick → delay → LClick → delay ..."""
+    """Hold loop: LClick → delay → LClick → delay ...
+    Recoil: smooth (1px/cycle with step delay) or hold (continues after release)."""
     try:
         delay = _cfg.get("ar_smg_delay", 80)
-        recoil = _cfg.get("recoil", True)
         recoil_amt = _cfg.get("recoil_amount", 4)
+        recoil = recoil_amt > 0
+        recoil_smooth = _cfg.get("recoil_smooth", True)
+        recoil_timeout = _cfg.get("recoil_timeout_ms", 1000)
         _log("AR/SMG loop started")
-        while _trigger_held and not _stop_macro.is_set():
-            mouse_click(MOUSEEVENTF_LEFTDOWN, MOUSEEVENTF_LEFTUP, 15)
+
+        smooth_step = max(10, delay // max(1, recoil_amt))
+        hold_ms = recoil_timeout if not recoil_smooth else 0
+        hold_remaining = 0
+
+        def _pull_step():
+            for _ in range(recoil_amt):
+                if _stop_macro.is_set():
+                    return
+                mouse_move(0, 1)
+                if recoil_smooth or hold_remaining:
+                    _wait(smooth_step)
+
+        while not _stop_macro.is_set():
+            if not _trigger_held and not hold_remaining:
+                break
+
+            if _trigger_held:
+                mouse_click(MOUSEEVENTF_LEFTDOWN, MOUSEEVENTF_LEFTUP, 15)
+                hold_remaining = hold_ms
+
             if recoil and recoil_amt:
-                mouse_move(0, recoil_amt)
+                _pull_step()
+
             if _stop_macro.is_set():
                 break
-            _wait(delay)
+
+            if not _trigger_held and hold_remaining:
+                hold_time = recoil_amt * smooth_step
+                hold_remaining = max(0, hold_remaining - hold_time)
+                if hold_remaining:
+                    continue
+                break
+
+            if _trigger_held:
+                _wait(delay)
+
         _log("AR/SMG loop stopped")
     except Exception as e:
         _log(f"AR/SMG error: {e}")
@@ -260,12 +294,12 @@ def _shortcut_poll():
             (VK_F5, "cycle_profile", None),
             (VK_F6, "toggle_trigger_block", None),
             (VK_F7, "cycle_mode", None),
-            (VK_F8, "toggle_recoil", None),
             (VK_F12, "toggle_listener", None),
             (VK_1, "select_delay_slot", 0),
             (VK_2, "select_delay_slot", 1),
             (VK_3, "select_delay_slot", 2),
             (VK_4, "select_delay_slot", 3),
+            (VK_N, "add_profile", None),
             (VK_OEM_PLUS, "delay_adjust", None),
             (VK_OEM_MINUS, "delay_adjust", None),
         ]:
@@ -277,8 +311,12 @@ def _shortcut_poll():
                 ctrl_down = (ctypes.windll.user32.GetAsyncKeyState(VK_CONTROL) & 0x8000) != 0
                 data = {}
 
+                # Ctrl+N → add profile
+                if ctrl_down and vk == VK_N:
+                    _log("Poll: Ctrl+N → add_profile")
+                    _queue_action("add_profile", {})
                 # Ctrl+1/2/3/4 select delay slot
-                if ctrl_down and vk in (VK_1, VK_2, VK_3, VK_4):
+                elif ctrl_down and vk in (VK_1, VK_2, VK_3, VK_4):
                     data["slot"] = slot
                     _slot_selected_at = ctypes.windll.kernel32.GetTickCount()
                     _log(f"Poll: Ctrl+{vk-0x30} → select_delay_slot slot={slot}")
@@ -302,8 +340,9 @@ def _shortcut_poll():
                         _queue_action("recoil_adjust", {"delta": -1})
                 # Non-Ctrl shortcuts
                 elif not ctrl_down:
-                    if action_name == "select_delay_slot":
-                        continue  # Ctrl not held for number keys
+                    # Skip keys that require Ctrl (number keys, N, etc.)
+                    if action_name == "select_delay_slot" or vk == VK_N:
+                        continue
                     if vk in (VK_OEM_PLUS, VK_OEM_MINUS):
                         data["delta"] = 1 if vk == VK_OEM_PLUS else -1
                         _log("Poll: =/- → delay_adjust delta={}".format(data["delta"]))
