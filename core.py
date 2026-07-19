@@ -340,8 +340,9 @@ def _shortcut_poll():
                         _queue_action("recoil_adjust", {"delta": -1})
                 # Non-Ctrl shortcuts
                 elif not ctrl_down:
-                    if action_name == "select_delay_slot":
-                        continue  # Ctrl not held for number keys
+                    # Skip keys that require Ctrl (number keys, N, etc.)
+                    if action_name == "select_delay_slot" or vk == VK_N:
+                        continue
                     if vk in (VK_OEM_PLUS, VK_OEM_MINUS):
                         data["delta"] = 1 if vk == VK_OEM_PLUS else -1
                         _log("Poll: =/- → delay_adjust delta={}".format(data["delta"]))
