@@ -108,6 +108,10 @@ def load_profiles():
             with open(path, 'r', encoding='utf-8') as f:
                 data = json.load(f)
             profiles = data.get("profiles", [])
+            # Migrate: ensure all profiles have new keys
+            for p in profiles:
+                p.setdefault("recoil_smooth", True)
+                p.setdefault("recoil_timeout_ms", 1000)
             active_idx = data.get("active", 0)
             if active_idx >= len(profiles):
                 active_idx = 0
@@ -166,7 +170,7 @@ def apply_profile(idx):
     except NameError:
         pass
     try:
-        if p["recoil"]:
+        if p.get("recoil", False):
             recoil_mode_var.set("Smooth" if p.get("recoil_smooth", True) else "Hold")
         else:
             recoil_mode_var.set("OFF")
@@ -457,7 +461,7 @@ def _toggle_recoil_mode():
         p["recoil"] = True
         p["recoil_smooth"] = True
         mode_label = "Smooth"
-    elif p["recoil_smooth"]:
+    elif p.get("recoil_smooth", True):
         p["recoil_smooth"] = False
         mode_label = "Hold"
     else:
