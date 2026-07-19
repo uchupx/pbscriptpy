@@ -503,22 +503,21 @@ def _handle_select_delay_slot(data):
     if p["mode"] == "ar_smg":
         if slot == 0:  # Ctrl+1 → Fire Rate
             _selected_delay_slot = 0
-            _log("Selected: Fire Rate")
+            return "Fire Rate"
         elif slot == 1:  # Ctrl+2 → Recoil Amount
             _selected_recoil = True
-            _log("Selected: Recoil Amount")
+            return "Recoil Amount"
         elif slot == 2:  # Ctrl+3 → Toggle mode
             _toggle_recoil_mode()
             return
         elif slot == 3:  # Ctrl+4 → Timeout
             _selected_timeout = True
-            _log("Selected: Recoil Timeout")
-        return
+            return "Recoil Timeout"
 
     # Sniper / Shotgun: existing delay slot select
-    _, vals = _get_delay_labels_and_vals(p)
+    labels, vals = _get_delay_labels_and_vals(p)
     _selected_delay_slot = max(0, min(slot, len(vals) - 1))
-    _log(f"Slot selected: {_selected_delay_slot} (mode={p['mode']}, delays={len(vals)})")
+    return f"{labels[_selected_delay_slot]}"
 
 def _handle_delay_adjust(data):
     global _selected_delay_slot, _selected_recoil, _selected_timeout
