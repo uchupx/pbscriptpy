@@ -251,8 +251,8 @@ def _sync_core():
     core.set_config("trigger", p["trigger"])
     core.set_config("switch_method", p["switch_method"])
     core.set_config("key_hold_delay", p["key_hold_delay"])
-    core.set_config("recoil", p["recoil"])
-    core.set_config("recoil_amount", p["recoil_amount"])
+    core.set_config("recoil", p.get("recoil_amount", 0) > 0)
+    core.set_config("recoil_amount", p.get("recoil_amount", 0))
     core.set_config("recoil_smooth", p.get("recoil_smooth", True))
     core.set_config("recoil_timeout_ms", p.get("recoil_timeout_ms", 1000))
     if p["mode"] == "sniper":
