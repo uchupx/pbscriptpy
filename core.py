@@ -224,50 +224,46 @@ def _run_shotgun():
 
 def _run_ar_smg():
     """Hold loop: LClick → delay → LClick → delay ...
-    Recoil: smooth (1px/cycle with step delay) or hold (continues after release)."""
+    Smooth recoil: gradual pull 1px/step, stops when trigger released.
+    Hold recoil: gradual pull for timeout_ms then stops (even if trigger still held)."""
     try:
         delay = _cfg.get("ar_smg_delay", 80)
         recoil_amt = _cfg.get("recoil_amount", 4)
-        recoil = recoil_amt > 0
-        recoil_smooth = _cfg.get("recoil_smooth", True)
-        recoil_timeout = _cfg.get("recoil_timeout_ms", 1000)
-        _log("AR/SMG loop started")
+        has_recoil = recoil_amt > 0
+        is_smooth = _cfg.get("recoil_smooth", True)
+        hold_timeout = _cfg.get("recoil_timeout_ms", 1000)
+        _log(f"AR/SMG started (recoil={'smooth' if is_smooth else 'hold'})")
 
-        smooth_step = max(10, delay // max(1, recoil_amt))
-        hold_ms = recoil_timeout if not recoil_smooth else 0
-        hold_remaining = 0
-
-        def _pull_step():
-            for _ in range(recoil_amt):
-                if _stop_macro.is_set():
-                    return
-                mouse_move(0, 1)
-                if recoil_smooth or hold_remaining:
-                    _wait(smooth_step)
+        step_ms = max(10, delay // max(1, recoil_amt))
+        recoil_elapsed = 0
+        recoil_on = False
 
         while not _stop_macro.is_set():
-            if not _trigger_held and not hold_remaining:
+            if not _trigger_held:
                 break
 
-            if _trigger_held:
-                mouse_click(MOUSEEVENTF_LEFTDOWN, MOUSEEVENTF_LEFTUP, 15)
-                hold_remaining = hold_ms
+            # Click
+            mouse_click(MOUSEEVENTF_LEFTDOWN, MOUSEEVENTF_LEFTUP, 15)
+            if has_recoil and not recoil_on:
+                recoil_on = True
+                recoil_elapsed = 0
 
-            if recoil and recoil_amt:
-                _pull_step()
+            # Pull recoil gradually
+            if has_recoil and recoil_on:
+                for _ in range(recoil_amt):
+                    if _stop_macro.is_set():
+                        break
+                    mouse_move(0, 1)
+                    _wait(step_ms)
+                    recoil_elapsed += step_ms
+                    if not is_smooth and recoil_elapsed >= hold_timeout:
+                        recoil_on = False
+                        break
 
             if _stop_macro.is_set():
                 break
 
-            if not _trigger_held and hold_remaining:
-                hold_time = recoil_amt * smooth_step
-                hold_remaining = max(0, hold_remaining - hold_time)
-                if hold_remaining:
-                    continue
-                break
-
-            if _trigger_held:
-                _wait(delay)
+            _wait(delay)
 
         _log("AR/SMG loop stopped")
     except Exception as e:
