@@ -38,6 +38,7 @@ KEYEVENTF_KEYUP = 0x0002
 # --- Shortcut VK codes (for GetAsyncKeyState polling) ---
 VK_CONTROL = 0x11
 VK_F1 = 0x70
+VK_F2 = 0x71
 VK_F5 = 0x74
 VK_F6 = 0x75
 VK_F7 = 0x76
@@ -291,6 +292,7 @@ def _shortcut_poll():
     try:
         for vk, action_name, slot in [
             (VK_F1, "show_status", None),
+            (VK_F2, "show_guide", None),
             (VK_F5, "cycle_profile", None),
             (VK_F6, "toggle_trigger_block", None),
             (VK_F7, "cycle_mode", None),

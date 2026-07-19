@@ -46,7 +46,7 @@ _loading_profile = False
 _toast_window = None
 _toast_timer = None
 
-def show_toast(text):
+def show_toast(text, duration=2500):
     global _toast_window, _toast_timer
     if _toast_timer:
         root.after_cancel(_toast_timer)
@@ -68,7 +68,7 @@ def show_toast(text):
     w = min(_toast_window.winfo_reqwidth(), root.winfo_screenwidth() - 20)
     _toast_window.geometry(f'{w}x{_toast_window.winfo_reqheight()}+10+10')
     _toast_window.deiconify()
-    _toast_timer = root.after(2500, _hide_toast)
+    _toast_timer = root.after(duration, _hide_toast)
 
 def _hide_toast():
     global _toast_timer
@@ -569,8 +569,30 @@ def _handle_timeout_adjust(data):
     _schedule_save()
     return f"Timeout: {new_val}ms"
 
+def _handle_show_guide(data):
+    """Show shortcut guide for current mode."""
+    p = profiles[active_idx]
+    mode = p["mode"]
+    lines = []
+    if mode == "sniper":
+        lines.append("Ctrl+1:Scope  Ctrl+2:Fire→Close")
+        lines.append("Ctrl+3:Close→Switch  Ctrl+4:Betw keys")
+    elif mode == "shotgun":
+        lines.append("Ctrl+1:Fire→Switch  Ctrl+2:Betw keys")
+    else:  # ar_smg
+        smooth = "Smooth" if p.get("recoil_smooth", True) else "Hold"
+        lines.append(f"Ctrl+1:Fire Rate  Ctrl+2:Recoil")
+        lines.append(f"Ctrl+3:Mode({smooth})  Ctrl+4:Timeout")
+    lines.append("")
+    lines.append("F1:Status  F2:Guide  F5:Profile")
+    lines.append("F6:Block  F7:Mode  F12:Tog  ^N:New")
+    lines.append("=/-:adjust  ^+/-:adjust(no-slot)")
+    show_toast("\n".join(lines), duration=4000)
+    return None
+
 ACTION_MAP = {
     "show_status": _handle_show_status,
+    "show_guide": _handle_show_guide,
     "cycle_profile": _handle_cycle_profile,
     "toggle_trigger_block": _handle_toggle_trigger_block,
     "cycle_mode": _handle_cycle_mode,
