@@ -222,19 +222,52 @@ def _run_shotgun():
         _finish_macro()
 
 def _run_ar_smg():
-    """Hold loop: LClick → delay → LClick → delay ..."""
+    """Hold loop: LClick → delay → LClick → delay ...
+    Recoil: smooth (1px/cycle with step delay) or hold (continues after release)."""
     try:
         delay = _cfg.get("ar_smg_delay", 80)
         recoil = _cfg.get("recoil", True)
         recoil_amt = _cfg.get("recoil_amount", 4)
+        recoil_smooth = _cfg.get("recoil_smooth", True)
+        recoil_timeout = _cfg.get("recoil_timeout_ms", 1000)
         _log("AR/SMG loop started")
-        while _trigger_held and not _stop_macro.is_set():
-            mouse_click(MOUSEEVENTF_LEFTDOWN, MOUSEEVENTF_LEFTUP, 15)
+
+        smooth_step = max(10, delay // max(1, recoil_amt))
+        hold_ms = recoil_timeout if not recoil_smooth else 0
+        hold_remaining = 0
+
+        def _pull_step():
+            for _ in range(recoil_amt):
+                if _stop_macro.is_set():
+                    return
+                mouse_move(0, 1)
+                if recoil_smooth or hold_remaining:
+                    _wait(smooth_step)
+
+        while not _stop_macro.is_set():
+            if not _trigger_held and not hold_remaining:
+                break
+
+            if _trigger_held:
+                mouse_click(MOUSEEVENTF_LEFTDOWN, MOUSEEVENTF_LEFTUP, 15)
+                hold_remaining = hold_ms
+
             if recoil and recoil_amt:
-                mouse_move(0, recoil_amt)
+                _pull_step()
+
             if _stop_macro.is_set():
                 break
-            _wait(delay)
+
+            if not _trigger_held and hold_remaining:
+                hold_time = recoil_amt * smooth_step
+                hold_remaining = max(0, hold_remaining - hold_time)
+                if hold_remaining:
+                    continue
+                break
+
+            if _trigger_held:
+                _wait(delay)
+
         _log("AR/SMG loop stopped")
     except Exception as e:
         _log(f"AR/SMG error: {e}")

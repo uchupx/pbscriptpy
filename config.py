@@ -15,6 +15,8 @@ DEFAULT = {
     "ar_smg_delay": 80,
     "recoil": True,
     "recoil_amount": 4,
+    "recoil_smooth": True,
+    "recoil_timeout_ms": 1000,
 
     # Switch method: "qq" or "31"
     "switch_method": "qq",

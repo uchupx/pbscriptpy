@@ -29,6 +29,8 @@ PROFILE_TEMPLATE = {
     "switch_method": "qq",
     "key_hold_delay": 40,
     "recoil": True, "recoil_amount": 4,
+    "recoil_smooth": True,
+    "recoil_timeout_ms": 1000,
 }
 
 # --- State ---
@@ -76,6 +78,7 @@ def _hide_toast():
 
 _selected_delay_slot = 0
 _selected_recoil = False
+_selected_timeout = False
 _last_action = ""
 _last_action_time = 0
 
@@ -158,6 +161,17 @@ def apply_profile(idx):
     key_hold_var.set(p["key_hold_delay"])
     recoil_var.set(p["recoil"])
     recoil_amt_var.set(p["recoil_amount"])
+    try:
+        recoil_timeout_var.set(p.get("recoil_timeout_ms", 1000))
+    except NameError:
+        pass
+    try:
+        if p["recoil"]:
+            recoil_mode_var.set("Smooth" if p.get("recoil_smooth", True) else "Hold")
+        else:
+            recoil_mode_var.set("OFF")
+    except NameError:
+        pass
 
     _sync_core()
     _loading_profile = False
@@ -232,6 +246,8 @@ def _sync_core():
     core.set_config("key_hold_delay", p["key_hold_delay"])
     core.set_config("recoil", p["recoil"])
     core.set_config("recoil_amount", p["recoil_amount"])
+    core.set_config("recoil_smooth", p.get("recoil_smooth", True))
+    core.set_config("recoil_timeout_ms", p.get("recoil_timeout_ms", 1000))
     if p["mode"] == "sniper":
         core.set_config("sniper_delays", p["sniper_delays"])
     elif p["mode"] == "shotgun":
@@ -351,6 +367,13 @@ def on_recoil_amt_change(val):
     _sync_core()
     _schedule_save()
 
+def on_timeout_change(val):
+    if _loading_profile:
+        return
+    profiles[active_idx]["recoil_timeout_ms"] = int(float(val))
+    _sync_core()
+    _schedule_save()
+
 def on_start():
     _sync_core()
     start_btn.config(state="disabled")
@@ -388,6 +411,10 @@ def _handle_show_status(data):
     labels, vals = _get_delay_labels_and_vals(p)
     delays_str = " ".join(f"{l}:{v}" for l, v in zip(labels, vals))
     rec_str = f"Rec:{p['recoil_amount']}px ON" if p["recoil"] else "Rec:OFF"
+    if p["mode"] == "ar_smg" and p["recoil"]:
+        mode_name = "Smooth" if p.get("recoil_smooth", True) else "Hold"
+        timeout = p.get("recoil_timeout_ms", 1000)
+        rec_str += f" {mode_name} T:{timeout}"
     return f"{mode_label} | {trigger_label} | {switch} | {delays_str} | {rec_str}"
 
 def _handle_cycle_profile(data):
@@ -423,6 +450,28 @@ def _handle_toggle_recoil(data):
     _schedule_save()
     return f"Recoil: {'ON' if p['recoil'] else 'OFF'}"
 
+def _toggle_recoil_mode():
+    """Cycle: OFF → Smooth → Hold → OFF. Returns toast text."""
+    p = profiles[active_idx]
+    if not p["recoil"]:
+        p["recoil"] = True
+        p["recoil_smooth"] = True
+        mode_label = "Smooth"
+    elif p["recoil_smooth"]:
+        p["recoil_smooth"] = False
+        mode_label = "Hold"
+    else:
+        p["recoil"] = False
+        mode_label = "OFF"
+    recoil_var.set(p["recoil"])
+    try:
+        recoil_mode_var.set(mode_label)
+    except NameError:
+        pass
+    _sync_core()
+    _schedule_save()
+    show_toast(f"Recoil: {mode_label}")
+
 def _handle_toggle_listener(data):
     if core.is_listening():
         core.stop_listener()
@@ -443,23 +492,39 @@ def _handle_add_profile(data):
     return f"Profile: {profiles[active_idx]['name']}"
 
 def _handle_select_delay_slot(data):
-    global _selected_delay_slot, _selected_recoil
+    global _selected_delay_slot, _selected_recoil, _selected_timeout
     p = profiles[active_idx]
     slot = data["slot"]
-    # AR/SMG: Ctrl+2 selects recoil amount instead of delay slot 1
-    if p["mode"] == "ar_smg" and slot == 1:
-        _selected_recoil = True
-        _log("Selected: Recoil Amount (AR/SMG)")
-        return
+
     _selected_recoil = False
+    _selected_timeout = False
+
+    if p["mode"] == "ar_smg":
+        if slot == 0:  # Ctrl+1 → Fire Rate
+            _selected_delay_slot = 0
+            _log("Selected: Fire Rate")
+        elif slot == 1:  # Ctrl+2 → Recoil Amount
+            _selected_recoil = True
+            _log("Selected: Recoil Amount")
+        elif slot == 2:  # Ctrl+3 → Toggle mode
+            _toggle_recoil_mode()
+            return
+        elif slot == 3:  # Ctrl+4 → Timeout
+            _selected_timeout = True
+            _log("Selected: Recoil Timeout")
+        return
+
+    # Sniper / Shotgun: existing delay slot select
     _, vals = _get_delay_labels_and_vals(p)
     _selected_delay_slot = max(0, min(slot, len(vals) - 1))
     _log(f"Slot selected: {_selected_delay_slot} (mode={p['mode']}, delays={len(vals)})")
 
 def _handle_delay_adjust(data):
-    global _selected_delay_slot, _selected_recoil
+    global _selected_delay_slot, _selected_recoil, _selected_timeout
     if _selected_recoil:
         return _handle_recoil_adjust(data)
+    if _selected_timeout:
+        return _handle_timeout_adjust(data)
     p = profiles[active_idx]
     mode = p["mode"]
     labels, vals = _get_delay_labels_and_vals(p)
@@ -490,6 +555,19 @@ def _handle_recoil_adjust(data):
     _sync_core()
     _schedule_save()
     return f"Recoil: {new_val}px"
+
+def _handle_timeout_adjust(data):
+    p = profiles[active_idx]
+    old_val = p.get("recoil_timeout_ms", 1000)
+    new_val = max(500, min(3000, old_val + data["delta"] * 100))
+    p["recoil_timeout_ms"] = new_val
+    try:
+        recoil_timeout_var.set(new_val)
+    except NameError:
+        pass
+    _sync_core()
+    _schedule_save()
+    return f"Timeout: {new_val}ms"
 
 ACTION_MAP = {
     "show_status": _handle_show_status,
@@ -627,6 +705,24 @@ recoil_scale = ttk.Scale(recoil_row, from_=1, to=20, orient="horizontal",
 recoil_scale.pack(side="left", fill="x", expand=True, padx=5)
 recoil_amt_label = ttk.Label(recoil_row, textvariable=recoil_amt_var, width=4)
 recoil_amt_label.pack(side="right")
+
+# Timeout slider
+timeout_row = ttk.Frame(recoil_frame)
+timeout_row.pack(fill="x", pady=(4, 0))
+ttk.Label(timeout_row, text="Timeout (ms):", width=14).pack(side="left")
+recoil_timeout_var = tk.IntVar(value=1000)
+timeout_scale = ttk.Scale(timeout_row, from_=500, to=3000, orient="horizontal",
+                          variable=recoil_timeout_var, command=on_timeout_change)
+timeout_scale.pack(side="left", fill="x", expand=True, padx=5)
+timeout_val = ttk.Label(timeout_row, textvariable=recoil_timeout_var, width=5)
+timeout_val.pack(side="right")
+
+# Mode indicator (controlled via Ctrl+3)
+mode_row = ttk.Frame(recoil_frame)
+mode_row.pack(fill="x", pady=(2, 0))
+ttk.Label(mode_row, text="Mode:").pack(side="left")
+recoil_mode_var = tk.StringVar(value="Smooth")
+ttk.Label(mode_row, textvariable=recoil_mode_var, font=("", 9, "bold")).pack(side="left", padx=5)
 
 # Buttons
 btn_frame = ttk.Frame(root)
