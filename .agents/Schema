@@ -9,25 +9,36 @@ Profile (JSON file - profiles.json):
   key_hold_delay: int (0-200ms)
   recoil: bool
   recoil_amount: int (1-20)
+  recoil_smooth: bool
+  recoil_timeout_ms: int (500-3000)
 
-AppState (runtime, in-memory):
-  running: bool
-  listening: bool
-  macro_active: bool
-  trigger_blocked: bool
+Engine State (engine/_state.py, module-level globals):
+  _listening, _running, _trigger_held: bool
+  _stop_macro: threading.Event
+  _cfg: dict (runtime copy of config.DEFAULT)
+  _hook, _hook_proc, _hook_thread, _hook_thread_id
+  _macro_thread: Thread
+  _pb_hwnd, _trigger_blocked
+  _log_callback, _status_callback, _action_callback: callable
+  _shortcut_running: bool
+  _shortcut_prev: dict (vk → bool debounce)
 
-ActionQueue (thread-safe, core.py → main.py):
-  action: str     # show_status, cycle_profile, toggle_trigger_block, cycle_mode, toggle_recoil, toggle_listener, select_delay_slot, delay_adjust, recoil_adjust
-  data: dict      # action-specific payload (slot/delta)
+App State (app/action_handlers.py, module-level):
+  _selected_delay_slot: int
+  _selected_recoil, _selected_timeout: bool
+  _last_action, _last_action_time: debounce
 
-Toast:
+ActionQueue (thread-safe, app/action_handlers.py):
+  action: str
+  data: dict
+
+Toast (app/toast.py):
   window: tkinter.Toplevel
   position: screen top-left (+10+10)
   duration: 2500ms
   alpha: 0.85
   font: Consolas 10 bold
 
-Keyboard Hook:
-  type: WH_KEYBOARD_LL (13)
-  lifecycle: always-on (separate from mouse hook)
-  modifiers: GetAsyncKeyState (Ctrl only)
+Layer Dependency:
+  app/ → imports → engine/
+  engine/ never imports app/

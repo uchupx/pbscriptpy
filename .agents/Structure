@@ -1,19 +1,28 @@
 pbscriptpy/
-├── main.py              # tkinter UI + toast overlay + action dispatcher
-├── core.py              # Hook, SendInput, macro engine, keyboard hook
-├── config.py            # Default settings
-├── profiles.json        # Auto-saved profile data
+├── main.py                    # Shim: `python main.py` → app.__main__
 ├── requirements.txt
-├── .github/
-│   └── workflows/
-│       └── build.yml    # GitHub Actions: PyInstaller Windows EXE build
-├── docs/
-│   ├── tutorial.md         # User guide (Bahasa Indonesia)
-│   └── superpowers/
-│       ├── specs/          # Design documents
-│       └── plans/          # Implementation plans
-├── .agents/             # Metadata
-├── Project.md           # PRD
+├── profiles.json              # Runtime data (auto-saved in ~/Documents/pbscriptpy/)
 ├── .gitignore
 ├── .gitattributes
-└── .git/
+│
+├── engine/                    # Pure Windows API — zero tkinter
+│   ├── __init__.py
+│   ├── config.py              # DEFAULT settings dict
+│   ├── _state.py              # Shared globals + public API (set_config, is_listening, etc.)
+│   ├── input_sim.py           # SendInput wrappers (mouse_down, key_press, _wait)
+│   ├── macros.py              # Macro sequences (sniper, shotgun, ar_smg)
+│   ├── hook.py                # WH_MOUSE_LL hook + listener lifecycle
+│   └── shortcuts.py           # GetAsyncKeyState polling thread
+│
+├── app/                       # tkinter layer
+│   ├── __init__.py
+│   ├── __main__.py            # Entry: wire UI + engine, start mainloop
+│   ├── ui.py                  # Widget creation (build_ui → root + refs)
+│   ├── profiles.py            # Profile CRUD, persistence, UI callbacks
+│   ├── toast.py               # Toast overlay Toplevel
+│   └── action_handlers.py     # Keyboard shortcut handlers + queue polling
+│
+├── docs/
+│   └── superpowers/specs/     # Design documents
+│
+└── .agents/                   # Metadata
