@@ -1,4 +1,4 @@
-# config.py - Default settings
+# engine/config.py - Default settings
 # ponytail: flat dict, no class tax
 
 DEFAULT = {

@@ -7,3 +7,11 @@
 - os (file path)
 - time (delays)
 - atexit (cleanup)
+
+Architecture:
+  engine/   — pure Windows API (no tkinter, no GUI concern)
+  app/      — tkinter UI layer (imports engine, never reverse)
+
+Architecture:
+  engine/   — pure Windows API (no tkinter, no GUI concern)
+  app/      — tkinter UI layer (imports engine, never reverse)

@@ -3,5 +3,6 @@
 - [x] Toast overlay (Toplevel, topmost, alpha, 2.5s auto-hide)
 - [x] Global keyboard hook (WH_KEYBOARD_LL, always-on)
 - [x] Action queue + dispatcher (thread-safe, poll-based)
-- [x] Shortcuts: F1, F5, F6, F7, F8, F12, Ctrl+1-4, =/-, Ctrl+=/-
+- [x] Shortcuts: F1, F2, F5, F6, F7, F12, Ctrl+1-4, =/-, Ctrl+=/-
 - [x] Auto-save debounce: 3000ms → 500ms
+- [x] Refactor: modular architecture (engine/ + app/ split)
