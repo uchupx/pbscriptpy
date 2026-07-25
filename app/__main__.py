@@ -1,13 +1,65 @@
 # app/__main__.py - Entry point: wire UI + engine, start main loop
-# ponytail: thin orchestration layer
+# ponytail: thin orchestration layer + auto-restart on code change
 
 import atexit
+import os
+import sys
+import threading
+import time
 from engine import _state
 from engine import shortcuts as engine_shortcuts
 from app import ui, toast, profiles, action_handlers
 
 
+# ===================== Auto-restart on code change =====================
+
+def _file_hash(path):
+    """Quick first-1KB+last-1KB hash for change detection (fast, no hashlib dep)."""
+    try:
+        size = os.path.getsize(path)
+        with open(path, 'rb') as f:
+            if size <= 2048:
+                return f.read()
+            head = f.read(1024)
+            f.seek(-1024, 2)
+            tail = f.read(1024)
+            return head + tail
+    except OSError:
+        return b''
+
+_watched_files = []
+
+def _init_watcher():
+    """Scan engine/ and app/ for .py files to watch."""
+    global _watched_files
+    _watched_files = []
+    for root in ['engine', 'app']:
+        if not os.path.isdir(root):
+            continue
+        for fname in os.listdir(root):
+            if fname.endswith('.py') and not fname.startswith('_state'):
+                fpath = os.path.join(root, fname)
+                _watched_files.append((fpath, _file_hash(fpath)))
+
+def _watcher_loop():
+    """Daemon thread: poll .py file changes every 1s, restart on change."""
+    while True:
+        time.sleep(1)
+        for fpath, old_hash in _watched_files:
+            new_hash = _file_hash(fpath)
+            if new_hash != old_hash:
+                # File changed → restart process
+                os.execl(sys.executable, sys.executable, *sys.argv)
+
+
+# ===================== Main =====================
+
 def main():
+    # --- Start file watcher (development auto-restart) ---
+    _init_watcher()
+    t = threading.Thread(target=_watcher_loop, daemon=True)
+    t.start()
+
     # --- Build UI ---
     root, vars_dict, widgets = ui.build_ui()
 

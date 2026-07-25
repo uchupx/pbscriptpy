@@ -1,1 +1,3 @@
-# No external dependencies - tkinter is stdlib on Windows
+# No external Python dependencies
+# Windows: stdlib (tkinter, ctypes) — included with Python
+# Linux: needs system packages: ydotool, input group for /dev/input evdev

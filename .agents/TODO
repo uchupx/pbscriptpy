@@ -6,3 +6,5 @@
 - [x] Shortcuts: F1, F2, F5, F6, F7, F12, Ctrl+1-4, =/-, Ctrl+=/-
 - [x] Auto-save debounce: 3000ms → 500ms
 - [x] Refactor: modular architecture (engine/ + app/ split)
+- [x] Platform abstraction: _plat_win32.py + _plat_linux.py
+- [x] Timing measurement: each macro logs cfg vs actual interval per step

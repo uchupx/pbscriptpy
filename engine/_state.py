@@ -1,12 +1,8 @@
 # engine/_state.py - Shared mutable state (module-level globals)
 # ponytail: flat globals, no class tax. Single source of truth for engine-wide state.
 
-import ctypes
 import threading
 from engine.config import DEFAULT
-
-# 1ms timer precision for accurate sleeps
-ctypes.windll.winmm.timeBeginPeriod(1)
 
 # --- Listener state ---
 _listening = False

@@ -1,17 +1,19 @@
 - Python 3.x
 - tkinter (stdlib - native Windows GUI)
-- ctypes (Windows API: user32.dll, winmm.dll, kernel32.dll)
+- ctypes (Windows API: user32.dll, winmm.dll, kernel32.dll) — Windows only
 - threading (async listener + keyboard hook)
 - queue.Queue (action dispatch from hook threads to main thread)
 - json (profile storage)
 - os (file path)
-- time (delays)
+- time (delays, key state timestamps)
 - atexit (cleanup)
+- struct (Linux: evdev input_event parsing)
+- subprocess (Linux: ydotool for input sim)
+- glob — Linux evdev device discovery
 
 Architecture:
-  engine/   — pure Windows API (no tkinter, no GUI concern)
-  app/      — tkinter UI layer (imports engine, never reverse)
-
-Architecture:
-  engine/   — pure Windows API (no tkinter, no GUI concern)
-  app/      — tkinter UI layer (imports engine, never reverse)
+  engine/_plat_win32.py — Windows backend (ctypes, WH_MOUSE_LL, SendInput)
+  engine/_plat_linux.py — Linux backend  (ydotool + evdev)
+  engine/input_sim.py, hook.py, shortcuts.py — sys.platform dispatchers
+  engine/macros.py — platform-agnostic (uses click_left/right, press_key)
+  app/             — tkinter UI (imports engine, never reverse)

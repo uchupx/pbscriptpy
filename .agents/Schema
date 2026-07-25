@@ -12,33 +12,27 @@ Profile (JSON file - profiles.json):
   recoil_smooth: bool
   recoil_timeout_ms: int (500-3000)
 
-Engine State (engine/_state.py, module-level globals):
+Engine State (engine/_state.py):
   _listening, _running, _trigger_held: bool
   _stop_macro: threading.Event
   _cfg: dict (runtime copy of config.DEFAULT)
-  _hook, _hook_proc, _hook_thread, _hook_thread_id
+  _hook, _hook_proc, _hook_thread, _hook_thread_id  (Windows only)
   _macro_thread: Thread
   _pb_hwnd, _trigger_blocked
   _log_callback, _status_callback, _action_callback: callable
   _shortcut_running: bool
-  _shortcut_prev: dict (vk → bool debounce)
+  _shortcut_prev: dict (key → bool debounce)
 
-App State (app/action_handlers.py, module-level):
-  _selected_delay_slot: int
-  _selected_recoil, _selected_timeout: bool
-  _last_action, _last_action_time: debounce
-
-ActionQueue (thread-safe, app/action_handlers.py):
-  action: str
-  data: dict
-
-Toast (app/toast.py):
-  window: tkinter.Toplevel
-  position: screen top-left (+10+10)
-  duration: 2500ms
-  alpha: 0.85
-  font: Consolas 10 bold
+Platform Backends (engine/_plat_*.py):
+  _plat_win32.py:
+    Input: SendInput via ctypes (user32.dll)
+    Hook: WH_MOUSE_LL (SetWindowsHookEx)
+    Shortcuts: GetAsyncKeyState polling
+  _plat_linux.py:
+    Input: ydotool subprocess
+    Hook: evdev /dev/input polling (needs input group)
+    Shortcuts: evdev /dev/input key state polling
 
 Layer Dependency:
-  app/ → imports → engine/
-  engine/ never imports app/
+  app/ → engine/* → engine/_plat_* (via sys.platform dispatch)
+  macros.py is platform-agnostic, uses click_left/right/press_key from input_sim

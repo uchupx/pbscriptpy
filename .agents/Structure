@@ -5,14 +5,16 @@ pbscriptpy/
 ├── .gitignore
 ├── .gitattributes
 │
-├── engine/                    # Pure Windows API — zero tkinter
+├── engine/                    # Core engine — platform-agnostic API
 │   ├── __init__.py
 │   ├── config.py              # DEFAULT settings dict
-│   ├── _state.py              # Shared globals + public API (set_config, is_listening, etc.)
-│   ├── input_sim.py           # SendInput wrappers (mouse_down, key_press, _wait)
-│   ├── macros.py              # Macro sequences (sniper, shotgun, ar_smg)
-│   ├── hook.py                # WH_MOUSE_LL hook + listener lifecycle
-│   └── shortcuts.py           # GetAsyncKeyState polling thread
+│   ├── _state.py              # Shared globals + public API (set_config, etc.)
+│   ├── input_sim.py           # Dispatcher: click_left/right, mouse_move, press_key, _wait
+│   ├── hook.py                # Dispatcher: start/stop_listener, trigger block
+│   ├── shortcuts.py           # Dispatcher: start/stop_shortcut_polling
+│   ├── macros.py              # Macro sequences (sniper/shotgun/ar_smg) — platform-agnostic
+│   ├── _plat_win32.py         # Windows: ctypes SendInput + WH_MOUSE_LL + GetAsyncKeyState
+│   └── _plat_linux.py         # Linux: ydotool + evdev polling
 │
 ├── app/                       # tkinter layer
 │   ├── __init__.py
