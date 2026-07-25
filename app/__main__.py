@@ -8,7 +8,7 @@ import threading
 import time
 from engine import _state
 from engine import shortcuts as engine_shortcuts
-from app import ui, toast, profiles, action_handlers
+from app import ui, toast, profiles, action_handlers, crosshair
 
 
 # ===================== Auto-restart on code change =====================
@@ -65,6 +65,10 @@ def main():
 
     # --- Init modules with UI refs ---
     toast.init(root)
+
+    # --- Init crosshair overlay (starts hidden, apply_profile shows if sniper) ---
+    crosshair.init(root)
+
     profiles.init(
         root,
         mode_var=vars_dict["mode_var"],
@@ -121,6 +125,7 @@ def main():
         from engine.hook import stop_listener
         stop_listener()
         engine_shortcuts.stop_shortcut_polling()
+        crosshair.destroy()
         root.destroy()
 
     root.protocol("WM_DELETE_WINDOW", on_close)

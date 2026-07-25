@@ -226,7 +226,7 @@ def is_trigger_blocked():
 
 VK_CONTROL = 0x11
 VK_F1 = 0x70; VK_F2 = 0x71; VK_F5 = 0x74; VK_F6 = 0x75; VK_F7 = 0x76; VK_F8 = 0x77; VK_F12 = 0x7B
-VK_1 = 0x31; VK_2 = 0x32; VK_3 = 0x33; VK_4 = 0x34
+VK_1 = 0x31; VK_2 = 0x32; VK_3 = 0x33; VK_4 = 0x34; VK_9 = 0x39; VK_0 = 0x30
 VK_OEM_PLUS = 0xBB; VK_OEM_MINUS = 0xBD; VK_N = 0x4E
 SHORTCUT_POLL_MS = 50
 
@@ -242,6 +242,7 @@ def _shortcut_poll():
             (VK_1, "select_delay_slot", 0), (VK_2, "select_delay_slot", 1),
             (VK_3, "select_delay_slot", 2), (VK_4, "select_delay_slot", 3),
             (VK_N, "add_profile", None),
+            (VK_9, "cycle_crosshair_shape", None), (VK_0, "cycle_crosshair_color", None),
             (VK_OEM_PLUS, "delay_adjust", None), (VK_OEM_MINUS, "delay_adjust", None),
         ]:
             now_down = _key_down(vk)
@@ -262,6 +263,8 @@ def _shortcut_poll():
                     target = "delay_adjust" if is_slot else "recoil_adjust"
                     delta = 1 if vk == VK_OEM_PLUS else -1
                     _state._queue_action(target, {"delta": delta})
+                elif ctrl and vk in (VK_9, VK_0):
+                    _state._queue_action(action_name, {})
                 elif not ctrl:
                     if action_name == "select_delay_slot" or vk == VK_N:
                         continue

@@ -7,6 +7,7 @@ import tkinter as tk
 from tkinter import ttk, messagebox, simpledialog
 from engine import _state
 from engine.hook import start_listener, stop_listener
+from app import crosshair
 
 # --- UI refs (set by init()) ---
 _root = None
@@ -161,6 +162,11 @@ def apply_profile(idx):
     else:
         _recoil_mode_var.set("OFF")
     _sync_core()
+    # Sync crosshair visibility
+    if p["mode"] == "sniper":
+        crosshair.show()
+    else:
+        crosshair.hide()
     _loading_profile = False
 
 def on_profile_select(name):
@@ -320,6 +326,11 @@ def on_mode_change(*args):
     rebuild_delays()
     _sync_core()
     _schedule_save()
+    # Show crosshair only in sniper mode
+    if _state.get_config("mode") == "sniper":
+        crosshair.show()
+    else:
+        crosshair.hide()
 
 def on_trigger_change(*args):
     if _loading_profile:

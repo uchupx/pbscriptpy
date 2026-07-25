@@ -22,6 +22,7 @@ pbscriptpy/
 │   ├── ui.py                  # Widget creation (build_ui → root + refs)
 │   ├── profiles.py            # Profile CRUD, persistence, UI callbacks
 │   ├── toast.py               # Toast overlay Toplevel
+│   ├── crosshair.py           # Transparent crosshair overlay (sniper mode)
 │   └── action_handlers.py     # Keyboard shortcut handlers + queue polling
 │
 ├── docs/

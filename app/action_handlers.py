@@ -6,7 +6,7 @@ from queue import Queue
 from engine import _state
 from engine.hook import start_listener, stop_listener
 from engine.shortcuts import start_shortcut_polling, stop_shortcut_polling
-from app import profiles, toast
+from app import profiles, toast, crosshair
 
 # --- Queues (bridges engine callbacks → UI) ---
 log_queue = Queue()
@@ -238,6 +238,21 @@ def _handle_show_guide(data):
     return None
 
 
+# ===================== Crosshair =====================
+
+def _handle_crosshair_shape(data):
+    if _state.get_config("mode") != "sniper":
+        return None
+    crosshair.cycle_shape()
+    return "Crosshair: " + ["Dot", "+", "Off"][crosshair._shape]
+
+def _handle_crosshair_color(data):
+    if _state.get_config("mode") != "sniper":
+        return None
+    crosshair.cycle_color()
+    return "Color: " + crosshair._colors[crosshair._color_idx]
+
+
 ACTION_MAP = {
     "show_status": _handle_show_status,
     "show_guide": _handle_show_guide,
@@ -249,6 +264,8 @@ ACTION_MAP = {
     "select_delay_slot": _handle_select_delay_slot,
     "delay_adjust": _handle_delay_adjust,
     "recoil_adjust": _handle_recoil_adjust,
+    "cycle_crosshair_shape": _handle_crosshair_shape,
+    "cycle_crosshair_color": _handle_crosshair_color,
 }
 
 
