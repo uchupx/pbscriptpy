@@ -2,6 +2,7 @@
 # ponytail: flat globals, tkinter + ctypes, zero deps
 
 import ctypes
+import sys
 import tkinter as tk
 
 # --- Constants ---
@@ -25,17 +26,18 @@ def init(parent):
     _win = tk.Toplevel(parent)
     _win.overrideredirect(True)
     _win.attributes('-topmost', True)
-    _win.attributes('-transparentcolor', 'black')
     _win.configure(bg='black')
     _win.geometry("32x32+{}+{}".format(
         (_win.winfo_screenwidth() - 32) // 2,
         (_win.winfo_screenheight() - 32) // 2
     ))
 
-    # Click-through: WS_EX_TRANSPARENT | WS_EX_LAYERED
-    hwnd = ctypes.c_void_p(_win.winfo_id())
-    style = ctypes.windll.user32.GetWindowLongW(hwnd, GWL_EXSTYLE)
-    ctypes.windll.user32.SetWindowLongW(hwnd, GWL_EXSTYLE, style | WS_EX_TRANSPARENT | WS_EX_LAYERED)
+    if sys.platform == "win32":
+        _win.attributes('-transparentcolor', 'black')
+        # Click-through: WS_EX_TRANSPARENT | WS_EX_LAYERED
+        hwnd = ctypes.c_void_p(_win.winfo_id())
+        style = ctypes.windll.user32.GetWindowLongW(hwnd, GWL_EXSTYLE)
+        ctypes.windll.user32.SetWindowLongW(hwnd, GWL_EXSTYLE, style | WS_EX_TRANSPARENT | WS_EX_LAYERED)
 
     _canvas = tk.Canvas(_win, width=32, height=32, bg='black', highlightthickness=0)
     _canvas.pack()
